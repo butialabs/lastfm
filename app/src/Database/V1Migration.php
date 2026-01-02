@@ -76,6 +76,8 @@ final class V1Migration
             $values = str_replace("'NULL'", 'NULL', $values);
             $row = str_getcsv($values, ',', "'", '\\');
             
+            $row = array_map('trim', $row);
+            
             if (count($row) >= 16) {
                 $users[] = [
                     'id' => (int)$row[0],
@@ -115,6 +117,8 @@ final class V1Migration
         foreach ($matches[1] as $values) {
             $values = str_replace("'NULL'", 'NULL', $values);
             $row = str_getcsv($values, ',', "'", '\\');
+            
+            $row = array_map('trim', $row);
             
             if (count($row) >= 7) {
                 $apps[] = [
