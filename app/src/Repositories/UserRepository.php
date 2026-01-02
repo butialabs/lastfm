@@ -187,7 +187,10 @@ final class UserRepository
         $todayDowUtc = (int) $nowUtc->format('N');
         $daysAhead = ($dow - $todayDowUtc + 7) % 7;
         $next = $nowUtc->modify('+' . $daysAhead . ' days');
-        [$hh, $mm, $ss] = array_map('intval', explode(':', $time));
+        $timeParts = array_map('intval', explode(':', $time));
+        $hh = $timeParts[0] ?? 0;
+        $mm = $timeParts[1] ?? 0;
+        $ss = $timeParts[2] ?? 0;
         $next = $next->setTime($hh, $mm, $ss);
         $local = $next->setTimezone($tz);
         return $local->format('H:i');
