@@ -16,14 +16,8 @@ RUN composer config platform.php-64bit 8.4 && \
 COPY crontab /etc/crontab.d/lastfm
 RUN chmod 0644 /etc/crontab.d/lastfm
 
-COPY /startup/05-data /startup/05-data
-RUN chmod +x /startup/05-data
-
-COPY /startup/10-env /startup/10-env
-RUN chmod +x /startup/10-env
-
-COPY /startup/20-migration /startup/20-migration
-RUN chmod +x /startup/20-migration
+COPY /startup/* /startup/
+RUN chmod +x /startup/*
 
 RUN chown -R www-data:www-data ${APP_PATH} && \
     chmod -R 755 ${APP_PATH}
