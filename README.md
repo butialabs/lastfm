@@ -1,7 +1,7 @@
 # LastFM.blue
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://ghcr.io/butialabs/lastfm)
-[![PHP](https://img.shields.io/badge/PHP-8.3+-purple?logo=php)](https://php.net)
+[![PHP](https://img.shields.io/badge/PHP-8.4+-purple?logo=php)](https://php.net)
 
 **LastFM.blue** that automates weekly posting of your Last.fm *Weekly Artist Chart* to **Bluesky (AT Protocol)** and **Mastodon**.
 
