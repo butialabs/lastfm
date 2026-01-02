@@ -1,0 +1,184 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Bootstrap\App;
+use App\Database\V1Migration;
+use App\Processors\QueueProcessor;
+use App\Processors\UserProcessor;
+use League\CLImate\CLImate;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$climate = new CLImate();
+$container = App::createContainer(basePath: dirname(__DIR__));
+
+$climate->description('LastFM CLI');
+
+$climate->arguments->add([
+    'command' => [
+        'description' => 'Command to execute (users, send, v1migrate)',
+        'required' => false,
+    ],
+    'schedule' => [
+        'prefix' => 's',
+        'longPrefix' => 'schedule',
+        'description' => 'Run user schedule processing',
+        'noValue' => true,
+    ],
+    'send' => [
+        'longPrefix' => 'send',
+        'description' => 'Process and send queued messages',
+        'noValue' => true,
+    ],
+    'force' => [
+        'prefix' => 'f',
+        'longPrefix' => 'force',
+        'description' => 'Force send for specific user',
+        'noValue' => true,
+    ],
+    'id' => [
+        'longPrefix' => 'id',
+        'description' => 'User ID for force send',
+        'castTo' => 'int',
+    ],
+    'file' => [
+        'longPrefix' => 'file',
+        'description' => 'SQL file path for v1 migration',
+    ],
+    'help' => [
+        'prefix' => 'h',
+        'longPrefix' => 'help',
+        'description' => 'Show this help',
+        'noValue' => true,
+    ],
+]);
+
+try {
+    $climate->arguments->parse();
+} catch (Exception $e) {
+    $climate->error($e->getMessage());
+    $climate->usage();
+    exit(2);
+}
+
+if ($climate->arguments->get('help')) {
+    $climate->usage();
+    exit(0);
+}
+
+$command = $climate->arguments->get('command');
+$isSchedule = $climate->arguments->get('schedule');
+$isSend = $climate->arguments->get('send');
+$isForce = $climate->arguments->get('force');
+$userId = $climate->arguments->get('id');
+
+try {
+    // php bin/lastfm users --schedule
+    if ($command === 'users' && $isSchedule) {
+        $climate->info('Running user schedule processing...');
+        $container->get(UserProcessor::class)->runSchedule();
+        $climate->green('Schedule processing completed.');
+        exit(0);
+    }
+
+    // php bin/lastfm users --send
+    if ($command === 'users' && $isSend) {
+        $climate->info('Running queue send processing...');
+        $container->get(QueueProcessor::class)->runSend();
+        $climate->green('Queue processing completed.');
+        exit(0);
+    }
+
+    // php bin/lastfm send --force --id=<user_id>
+    if ($command === 'send' && $isForce) {
+        if ($userId === null || $userId <= 0) {
+            $climate->error('User ID is required. Use --id=<user_id>');
+            $climate->usage();
+            exit(2);
+        }
+
+        $userProcessor = $container->get(UserProcessor::class);
+        $queueProcessor = $container->get(QueueProcessor::class);
+
+        $climate->info("Force sending for user ID: {$userId}");
+
+        $climate->yellow('Step 1: Processing user and generating montage...');
+        $queued = $userProcessor->processUserById($userId);
+        if (!$queued) {
+            $climate->error("Failed to queue user ID: {$userId}");
+            exit(1);
+        }
+        $climate->green('User queued successfully.');
+
+        $climate->yellow('Step 2: Sending message to social network...');
+        $sent = $queueProcessor->sendForUserId($userId);
+        if (!$sent) {
+            $climate->error("Failed to send for user ID: {$userId}");
+            exit(1);
+        }
+        $climate->green("Message sent successfully for user ID: {$userId}");
+        exit(0);
+    }
+
+    // php bin/lastfm v1migrate --file=<sql_file>
+    if ($command === 'v1migrate') {
+        $sqlFile = $climate->arguments->get('file');
+        
+        if (empty($sqlFile)) {
+            $climate->error('SQL file path is required. Use --file=<path_to_sql_file>');
+            $climate->usage();
+            exit(2);
+        }
+
+        if (!file_exists($sqlFile)) {
+            $climate->error("SQL file not found: {$sqlFile}");
+            exit(2);
+        }
+
+        $climate->info('Starting LastFM v1 migration...');
+        $climate->info("Source file: {$sqlFile}");
+
+        try {
+            $migration = $container->get(V1Migration::class);
+            $stats = $migration->migrateFromFile($sqlFile);
+
+            $climate->green('Migration completed successfully!');
+            $climate->br();
+            $climate->bold()->out('Migration Statistics:');
+            $climate->tab()->out("Users migrated: {$stats['users']}");
+            $climate->tab()->out("Mastodon apps found: {$stats['mastodon_apps']}");
+            
+            if ($stats['errors'] > 0) {
+                $climate->yellow("Errors encountered: {$stats['errors']}");
+            }
+            
+            if (!empty($stats['warnings'])) {
+                $climate->yellow('Warnings:');
+                foreach ($stats['warnings'] as $warning) {
+                    $climate->tab()->out("- {$warning}");
+                }
+            }
+
+            exit(0);
+
+        } catch (\Throwable $e) {
+            $climate->error("Migration failed: {$e->getMessage()}");
+            exit(1);
+        }
+    }
+
+    $climate->br();
+    $climate->bold()->out('Usage:');
+    $climate->tab()->out('php bin/lastfm users --schedule    Process scheduled users');
+    $climate->tab()->out('php bin/lastfm users --send        Send queued messages');
+    $climate->tab()->out('php bin/lastfm send --force --id=<user_id>  Force send for specific user');
+    $climate->tab()->out('php bin/lastfm v1migrate --file=<sql_file>  Migrate from v1 MariaDB export');
+    $climate->br();
+    $climate->usage();
+    exit(2);
+} catch (Throwable $e) {
+    $climate->error("Fatal: {$e->getMessage()}");
+    exit(1);
+}

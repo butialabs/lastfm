@@ -1,0 +1,22 @@
+services:
+  lastfm:
+    image: ghcr.io/butialabs/lastfm:latest
+    container_name: lastfm
+    environment:
+      TZ: ${TZ:-UTC}
+      APP_URL: ${APP_URL:-https://lastfm.blue}
+      LASTFM_API: ${LASTFM_API:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      MUSICBRAINZ_DEFAULT: ${MUSICBRAINZ_DEFAULT:-false}
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    ports:
+      - 80:80
+    volumes:
+      - ./lastfm/data:/app/data
+    restart: unless-stopped
+    networks:
+      - lastfm
+networks:
+  lastfm:
+    driver: bridge

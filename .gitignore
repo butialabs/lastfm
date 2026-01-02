@@ -1,0 +1,9 @@
+cmd.txt
+**/vendor/*
+vendor
+.env
+composer.lock
+**/node_modules/*
+data/**
+!data/**/.gitkeep
+app/data/**/*

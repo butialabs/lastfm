@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo "Running migrations..."
+php /app/phinx.php ENV_SOURCE=/app/.env
+
+if [ $? -eq 0 ]; then
+    echo "Migrations completed successfully"
+else
+    echo "Migrations failed"
+    exit 1
+fi

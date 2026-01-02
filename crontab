@@ -1,0 +1,5 @@
+# Schedule to publish
+* * * * * /usr/local/bin/php /app/bin/lastfm users --schedule 2>&1 | tee -a /tmp/schedule.log
+
+# Send scheduled
+* * * * * /usr/local/bin/php /app/bin/lastfm users --send 2>&1 | tee -a /tmp/send.log

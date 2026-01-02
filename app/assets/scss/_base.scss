@@ -1,0 +1,48 @@
+body {
+	font-family: var(--font-family-red_hat_display);
+	font-size: var(--font-size);
+	font-weight: var(--font-weight);
+	line-height: var(--line-height);
+	color: var(--text);
+	text-align: center;
+    background: #EEAECA;
+    background: linear-gradient(0deg, rgba(238, 174, 202, 1) 0%, rgba(148, 187, 233, 1) 100%);
+	min-width: 320px;
+}
+
+a {
+	text-decoration: underline;
+	color: var(--link);
+
+	&:hover {
+		text-decoration: none;
+		color: var(--link-lighten);
+	}
+}
+
+html {
+	min-height: 100%;
+}
+
+
+.page-login {
+	height: 100vh;
+}
+.page-settings {
+    height: 100%;
+    min-height: 100vh;
+}
+
+.middle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 100%;
+}
+
+.container {
+	padding: var(--container_spacing);
+	margin-right: auto;
+	margin-left: auto;
+	max-width: 820px;
+}

@@ -1,0 +1,13 @@
+@mixin create-color($name, $light, $dark) {
+	--#{$name}: #{$light};
+	--#{$name}-lighten: #{lighten($color: $light, $amount: 5)};
+	--#{$name}-darken: #{darken($color: $light, $amount: 10)};
+}
+
+@mixin devices($breakpoint) {
+	@if $breakpoint == desktop {
+		@media only screen and (min-width: 1200px) {
+			@content;
+		}
+	}
+}
