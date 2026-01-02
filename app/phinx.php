@@ -10,14 +10,22 @@ if (file_exists(__DIR__ . '/.env')) {
     Dotenv::createImmutable(__DIR__)->safeLoad();
 }
 
-$sqlitePath = $_ENV['SQLITE_PATH'] ?? 'data/db/lastfm.sqlite';
-$sqliteFullPath = $sqlitePath;
+$path = $_ENV['SQLITE_PATH'] ?? 'data/db/lastfm.sqlite';
 
-if (!str_starts_with($sqliteFullPath, '/') && !preg_match('/^[A-Za-z]:\\\\/', $sqliteFullPath)) {
-    $sqliteFullPath = __DIR__ . '/' . $sqliteFullPath;
+if (!str_starts_with($path, '/') && !preg_match('/^[A-Za-z]:\\\\/', $path)) {
+    $path = __DIR__ . '/' . $path;
 }
 
-return [
+$dir = dirname($path);
+if (!is_dir($dir)) {
+    mkdir($dir, 0775, true);
+}
+
+if (!file_exists($path)) {
+    touch($path);
+}
+
+$config = [
     'paths' => [
         'migrations' => __DIR__ . '/database/migrations',
     ],
@@ -26,8 +34,10 @@ return [
         'default_environment' => 'production',
         'production' => [
             'adapter' => 'sqlite',
-            'name' => $sqliteFullPath,
+            'name' => $path,
             'suffix' => '',
         ],
     ],
 ];
+
+return $config;
