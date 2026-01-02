@@ -17,9 +17,9 @@ log_info() {
 
 log_info "Setting up data directories..."
 
-# Create thumbnails directory
 mkdir -p /app/data/montage /app/data/cache /app/data/db /app/data/logs
-chown -R www-data:www-data /app/data/montage
-chmod -R 755 /app/data/montage
+
+chown -R www-data:www-data /app/data
+chmod -R 755 /app/data
 
 log_success "Data directories configured successfully"
