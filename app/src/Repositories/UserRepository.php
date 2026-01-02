@@ -29,10 +29,19 @@ final class UserRepository
         return dirname(__DIR__, 2) . '/' . $relative;
     }
 
-    public function deleteMontageFile(string $relative): void
+    public function montageUrlToFilePath(string $montageUrl): ?string
     {
-        $path = $this->absolutePath($relative);
-        if (is_file($path)) {
+        if (preg_match('#^/montage/([a-f0-9]{32})$#i', $montageUrl, $matches)) {
+            $hash = $matches[1];
+            return dirname(__DIR__, 2) . '/data/montage/' . $hash . '.jpg';
+        }
+        return null;
+    }
+
+    public function deleteMontageFile(string $montageUrl): void
+    {
+        $path = $this->montageUrlToFilePath($montageUrl);
+        if ($path !== null && is_file($path)) {
             @unlink($path);
         }
     }

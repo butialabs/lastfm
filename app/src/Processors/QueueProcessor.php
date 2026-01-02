@@ -82,10 +82,15 @@ final class QueueProcessor
             $text = $this->buildPostText($user, $language);
             $threads = $this->splitTextForProtocol($text, $protocol);
 
+            $montageFilePath = $this->users->montageUrlToFilePath($montagePath);
+            if ($montageFilePath === null || !is_file($montageFilePath)) {
+                throw new \RuntimeException('Montage file not found');
+            }
+
             if ($protocol === 'at') {
                 $password = $this->crypto->decrypt((string) $user['password']);
                 $session = $this->bluesky->createSession($instance, (string) $user['username'], $password);
-                $imageData = $this->bluesky->uploadImage($instance, $session['accessJwt'], $this->users->absolutePath($montagePath));
+                $imageData = $this->bluesky->uploadImage($instance, $session['accessJwt'], $montageFilePath);
 
                 $root = null;
                 $parent = null;
@@ -97,7 +102,7 @@ final class QueueProcessor
                 }
             } elseif ($protocol === 'mastodon') {
                 $token = $this->crypto->decrypt((string) $user['token']);
-                $mediaId = $this->mastodon->uploadMedia($instance, $token, $this->users->absolutePath($montagePath));
+                $mediaId = $this->mastodon->uploadMedia($instance, $token, $montageFilePath);
 
                 $inReplyTo = null;
                 foreach ($threads as $i => $chunk) {

@@ -6,6 +6,7 @@ namespace App\Bootstrap;
 
 use App\Controllers\AdminController;
 use App\Controllers\AuthController;
+use App\Controllers\MontageController;
 use App\Controllers\SettingsController;
 use App\Database\ConnectionFactory;
 use App\Database\V1Migration;
@@ -140,6 +141,9 @@ final class App
             ->addArgument(ConnectionFactory::class)
             ->addArgument(Engine::class);
 
+        $container->add(MontageController::class)
+            ->addArgument('dataPath');
+
         $container->add(V1Migration::class)
             ->addArgument(ConnectionFactory::class)
             ->addArgument(LoggerInterface::class);
@@ -164,6 +168,8 @@ final class App
         $router->map('GET', '/auth/mastodon/callback', [AuthController::class, 'callbackMastodon']);
         $router->map('POST', '/logout', [AuthController::class, 'logout']);
         $router->map('POST', '/account/delete', [AuthController::class, 'deleteAccount']);
+
+        $router->map('GET', '/montage/{hash}', [MontageController::class, 'show']);
 
         $router->map('GET', '/admin', [AdminController::class, 'index']);
         $router->map('GET', '/admin/login', [AdminController::class, 'loginForm']);

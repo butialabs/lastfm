@@ -25,7 +25,7 @@ final class MontageService
 
     /**
      * @param list<string> $imagePaths absolute paths (may include empty strings)
-     * @return string relative path (from project root)
+     * @return string URL path for the montage (e.g., /montage/{hash})
      */
     public function createWeeklyMontage(int $userId, array $imagePaths): string
     {
@@ -50,11 +50,11 @@ final class MontageService
 
         $this->placeImage($canvas, $imagePaths[4] ?? '', $leftW + $rightCellW, $rightCellH, $rightCellW, $rightCellH);
 
-        $relative = 'data/montage/' . md5((string) $userId) . '.jpg';
-        $abs = dirname(__DIR__, 2) . '/' . $relative;
+        $hash = md5((string) $userId);
+        $abs = $this->montageDir . '/' . $hash . '.jpg';
 
         $canvas->toJpeg(quality: 82)->save($abs);
-        return $relative;
+        return '/montage/' . $hash;
     }
 
     /**
