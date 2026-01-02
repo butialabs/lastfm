@@ -174,7 +174,9 @@ final class UserRepository
         $daysAhead = ($dayOfWeek - $todayDow + 7) % 7;
         $targetDate = $nowLocal->modify('+' . $daysAhead . ' days')->setTime(0, 0, 0);
 
-        [$hh, $mm] = array_map('intval', explode(':', $hour));
+        $hourParts = array_map('intval', explode(':', $hour));
+        $hh = $hourParts[0] ?? 0;
+        $mm = $hourParts[1] ?? 0;
         $targetLocal = $targetDate->setTime($hh, $mm, 0);
         $targetUtc = $targetLocal->setTimezone(new DateTimeZone('UTC'));
 
