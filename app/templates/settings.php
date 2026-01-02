@@ -72,7 +72,7 @@
 		<?php } ?>
 
 		<div class="save" style="display: <?php echo $haveData ? 'none' : 'flex' ?>">
-			<form id="save" method="post" action="/settings" >
+			<form id="save" method="post" action="/settings" autocomplete="off" data-form-type="other">
 				<div class="form-fill">
 					<div class="form-row">
 						<input type="text" id="lastfm_username" name="lastfm_username" placeholder="<?php echo htmlspecialchars(__('settings.lastfm_username'), ENT_QUOTES); ?>" value="<?php echo htmlspecialchars($user['lastfm_username'] ?? '', ENT_QUOTES); ?>" required>
