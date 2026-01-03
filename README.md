@@ -140,7 +140,7 @@ php -S localhost:8080 -t public
 php bin/lastfm users --schedule
 
 # Process queue (send posts to Bluesky/Mastodon)
-php bin/lastfm --send
+php bin/lastfm users --send
 ```
 
 ---
