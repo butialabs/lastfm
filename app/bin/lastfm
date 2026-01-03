@@ -4,7 +4,6 @@
 declare(strict_types=1);
 
 use App\Bootstrap\App;
-use App\Database\V1Migration;
 use App\Processors\QueueProcessor;
 use App\Processors\UserProcessor;
 use League\CLImate\CLImate;
@@ -18,7 +17,7 @@ $climate->description('LastFM CLI');
 
 $climate->arguments->add([
     'command' => [
-        'description' => 'Command to execute (users, send, v1migrate)',
+        'description' => 'Command to execute (users, send)',
         'required' => false,
     ],
     'schedule' => [
@@ -42,10 +41,6 @@ $climate->arguments->add([
         'longPrefix' => 'id',
         'description' => 'User ID for force send',
         'castTo' => 'int',
-    ],
-    'file' => [
-        'longPrefix' => 'file',
-        'description' => 'SQL file path for v1 migration',
     ],
     'help' => [
         'prefix' => 'h',
@@ -122,59 +117,11 @@ try {
         exit(0);
     }
 
-    // php bin/lastfm v1migrate --file=<sql_file>
-    if ($command === 'v1migrate') {
-        $sqlFile = $climate->arguments->get('file');
-        
-        if (empty($sqlFile)) {
-            $climate->error('SQL file path is required. Use --file=<path_to_sql_file>');
-            $climate->usage();
-            exit(2);
-        }
-
-        if (!file_exists($sqlFile)) {
-            $climate->error("SQL file not found: {$sqlFile}");
-            exit(2);
-        }
-
-        $climate->info('Starting LastFM v1 migration...');
-        $climate->info("Source file: {$sqlFile}");
-
-        try {
-            $migration = $container->get(V1Migration::class);
-            $stats = $migration->migrateFromFile($sqlFile);
-
-            $climate->green('Migration completed successfully!');
-            $climate->br();
-            $climate->bold()->out('Migration Statistics:');
-            $climate->tab()->out("Users migrated: {$stats['users']}");
-            $climate->tab()->out("Mastodon apps found: {$stats['mastodon_apps']}");
-            
-            if ($stats['errors'] > 0) {
-                $climate->yellow("Errors encountered: {$stats['errors']}");
-            }
-            
-            if (!empty($stats['warnings'])) {
-                $climate->yellow('Warnings:');
-                foreach ($stats['warnings'] as $warning) {
-                    $climate->tab()->out("- {$warning}");
-                }
-            }
-
-            exit(0);
-
-        } catch (\Throwable $e) {
-            $climate->error("Migration failed: {$e->getMessage()}");
-            exit(1);
-        }
-    }
-
     $climate->br();
     $climate->bold()->out('Usage:');
     $climate->tab()->out('php bin/lastfm users --schedule    Process scheduled users');
     $climate->tab()->out('php bin/lastfm users --send        Send queued messages');
     $climate->tab()->out('php bin/lastfm send --force --id=<user_id>  Force send for specific user');
-    $climate->tab()->out('php bin/lastfm v1migrate --file=<sql_file>  Migrate from v1 MariaDB export');
     $climate->br();
     $climate->usage();
     exit(2);

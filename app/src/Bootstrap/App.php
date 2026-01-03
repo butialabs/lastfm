@@ -9,7 +9,6 @@ use App\Controllers\AuthController;
 use App\Controllers\MontageController;
 use App\Controllers\SettingsController;
 use App\Database\ConnectionFactory;
-use App\Database\V1Migration;
 use App\Processors\QueueProcessor;
 use App\Processors\UserProcessor;
 use App\Repositories\UserRepository;
@@ -143,10 +142,6 @@ final class App
 
         $container->add(MontageController::class)
             ->addArgument('dataPath');
-
-        $container->add(V1Migration::class)
-            ->addArgument(ConnectionFactory::class)
-            ->addArgument(LoggerInterface::class);
 
         return $container;
     }
