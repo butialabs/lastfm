@@ -11,7 +11,7 @@ header {
     h1 {
         margin: 0;
         padding: 22px 0;
-        font-size: 38px;
+        font-size: 32px;
 
         @include devices(desktop) {
             font-size: 48px;
@@ -580,10 +580,20 @@ footer {
     font-size: 14px;
     line-height: 1.3em;
     padding-top: 12px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
     gap: 16px;
+
+    @include devices(desktop) {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .users {
+        padding: 6px 0;
+        @include devices(desktop) {
+            padding: 0;
+        }
+    }
 
     select {
         font-family: var(--font-family-red_hat_display);
@@ -593,7 +603,6 @@ footer {
 
         border: 1px solid var(--gray);
         background-color: #FFF;
-        width: 100%;
 
         &:hover {
             border-color: var(--gray-darken);

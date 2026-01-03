@@ -75,7 +75,7 @@ $descriptionHtml = str_replace(
 			<footer>
 				<div><?= htmlspecialchars(__('footer.made_with_love'), ENT_QUOTES) ?> <a href="https://butialabs.com" target="_blank" rel="noopener"><strong>Butiá Labs</strong></a> ● <a href="https://github.com/butialabs/lastfm" target="_blank"><strong>Github</strong></a></div>
 				
-				<div><?= htmlspecialchars(trans_choice('footer.total_users', $totalUsers ?? 0), ENT_QUOTES) ?></div>
+				<div class="users"><?= htmlspecialchars(trans_choice('footer.total_users', $totalUsers ?? 0), ENT_QUOTES) ?></div>
 
 				<form method="post" action="/locale">
 					<select name="locale" onchange="this.form.submit()" aria-label="<?= htmlspecialchars(__('app.language'), ENT_QUOTES) ?>">
