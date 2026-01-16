@@ -308,26 +308,43 @@ final class LastFmService
             'format' => 'json',
         ]);
 
-        try {
-            $res = $this->http->get('https://ws.audioscrobbler.com/2.0/', [
-                'query' => $query,
-            ]);
-            $code = $res->getStatusCode();
+        $maxRetries = (int) ($_ENV['LASTFM_MAX_RETRIES'] ?? 3);
+        $lastException = null;
 
-            $json = json_decode((string) $res->getBody(), true);
-            if (!is_array($json)) {
-                throw new \RuntimeException('Last.fm returned invalid JSON');
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                $res = $this->http->get('https://ws.audioscrobbler.com/2.0/', [
+                    'query' => $query,
+                ]);
+                $code = $res->getStatusCode();
+
+                $json = json_decode((string) $res->getBody(), true);
+                if (!is_array($json)) {
+                    throw new \RuntimeException('Last.fm returned invalid JSON');
+                }
+
+                if ($code >= 400 || isset($json['error'])) {
+                    $msg = (string) ($json['message'] ?? ('HTTP ' . $code));
+                    throw new \RuntimeException('Last.fm error: ' . $msg);
+                }
+
+                return $json;
+            } catch (Throwable $e) {
+                $lastException = $e;
+                $this->logger->warning('Last.fm request failed', [
+                    'method' => $method,
+                    'attempt' => $attempt,
+                    'max_retries' => $maxRetries,
+                    'error' => $e->getMessage(),
+                ]);
+
+                if ($attempt < $maxRetries) {
+                    $delay = (int) pow(2, $attempt - 1) * 1000000;
+                    usleep($delay);
+                }
             }
-
-            if ($code >= 400 || isset($json['error'])) {
-                $msg = (string) ($json['message'] ?? ('HTTP ' . $code));
-                throw new \RuntimeException('Last.fm error: ' . $msg);
-            }
-
-            return $json;
-        } catch (Throwable $e) {
-            $this->logger->warning('Last.fm request failed', ['method' => $method, 'error' => $e->getMessage()]);
-            throw new \RuntimeException('Last.fm request failed: ' . $e->getMessage());
         }
+
+        throw new \RuntimeException('Last.fm request failed after ' . $maxRetries . ' attempts: ' . ($lastException?->getMessage() ?? 'Unknown error'));
     }
 }

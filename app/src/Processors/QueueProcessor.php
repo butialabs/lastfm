@@ -137,35 +137,26 @@ final class QueueProcessor
         $mention = $proto === 'mastodon' ? '@lfm_blue@mastodon.social' : '@lastfm.blue';
         $username = (string) ($user['lastfm_username'] ?? '');
 
-        try {
-            $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
-            $artistParts = [];
-            $totalScrobbles = 0;
+        $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
+        $artistParts = [];
+        $totalScrobbles = 0;
 
-            foreach ($chart as $a) {
-                $artistParts[] = sprintf('%s (%d)', $a['name'], $a['playcount']);
-                $totalScrobbles += (int) $a['playcount'];
-            }
-
-            $artistList = implode(' ', $artistParts);
-            $scrobblesText = __('post.scrobbles', ['count' => $totalScrobbles], $language);
-
-            return sprintf(
-                '♫ %s: %s. #myweekcounted %s #music %s %s',
-                __('post.top_artists', [], $language),
-                $artistList,
-                $scrobblesText,
-                __('post.via', [], $language),
-                $mention
-            );
-        } catch (Throwable) {
-            return sprintf(
-                '♫ %s #myweekcounted #music %s %s',
-                __('post.intro', [], $language),
-                __('post.via', [], $language),
-                $mention
-            );
+        foreach ($chart as $a) {
+            $artistParts[] = sprintf('%s (%d)', $a['name'], $a['playcount']);
+            $totalScrobbles += (int) $a['playcount'];
         }
+
+        $artistList = implode(' ', $artistParts);
+        $scrobblesText = __('post.scrobbles', ['count' => $totalScrobbles], $language);
+
+        return sprintf(
+            '♫ %s: %s. #myweekcounted %s #music %s %s',
+            __('post.top_artists', [], $language),
+            $artistList,
+            $scrobblesText,
+            __('post.via', [], $language),
+            $mention
+        );
     }
 
     /** @return list<string> */
