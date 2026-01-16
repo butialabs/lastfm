@@ -170,6 +170,7 @@ final class App
         $router->map('GET', '/admin/login', [AdminController::class, 'loginForm']);
         $router->map('POST', '/admin/login', [AdminController::class, 'login']);
         $router->map('POST', '/admin/logout', [AdminController::class, 'logout']);
+        $router->map('GET', '/admin/user/{id:\d+}', [AdminController::class, 'showUser']);
 
         $router->setStrategy((new \League\Route\Strategy\ApplicationStrategy())->setContainer($container));
 

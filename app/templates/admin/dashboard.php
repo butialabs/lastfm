@@ -122,12 +122,13 @@
 						<th><?= htmlspecialchars(__('admin.table.timezone'), ENT_QUOTES) ?></th>
 						<th><?= htmlspecialchars(__('admin.table.errors'), ENT_QUOTES) ?></th>
 						<th><?= htmlspecialchars(__('admin.table.dates'), ENT_QUOTES) ?></th>
+						<th class="text-center"><?= htmlspecialchars(__('admin.table.actions'), ENT_QUOTES) ?></th>
 					</tr>
 				</thead>
 				<tbody>
 					<?php if (empty($users)): ?>
 						<tr>
-							<td colspan="10" class="text-center text-muted py-4"><?= htmlspecialchars(__('admin.table.no_users'), ENT_QUOTES) ?></td>
+							<td colspan="11" class="text-center text-muted py-4"><?= htmlspecialchars(__('admin.table.no_users'), ENT_QUOTES) ?></td>
 						</tr>
 					<?php else: ?>
 						<?php foreach ($users as $user): ?>
@@ -210,6 +211,11 @@
 								<td>
 									<?= htmlspecialchars(substr($user['created_at'] ?? '', 0, 10), ENT_QUOTES) ?> / <?= htmlspecialchars(substr($user['updated_at'] ?? '', 0, 10), ENT_QUOTES) ?>
 								</td>
+								<td class="text-center">
+									<button type="button" class="btn btn-sm btn-outline-primary view-user-btn" data-user-id="<?= (int) $user['id'] ?>" title="<?= htmlspecialchars(__('admin.table.view_user'), ENT_QUOTES) ?>">
+										<i class="bi bi-eye"></i>
+									</button>
+								</td>
 							</tr>
 						<?php endforeach; ?>
 					<?php endif; ?>
@@ -267,3 +273,135 @@
 		<?php endif; ?>
 	</div>
 </div>
+
+<div class="modal fade" id="userDetailsModal" tabindex="-1" aria-labelledby="userDetailsModalLabel" aria-hidden="true">
+	<div class="modal-dialog modal-lg">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title" id="userDetailsModalLabel"><?= htmlspecialchars(__('admin.modal.user_details'), ENT_QUOTES) ?></h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= htmlspecialchars(__('admin.modal.close'), ENT_QUOTES) ?>"></button>
+			</div>
+			<div class="modal-body" id="userDetailsModalBody">
+				<div class="text-center py-4">
+					<div class="spinner-border text-primary" role="status">
+						<span class="visually-hidden"><?= htmlspecialchars(__('admin.modal.loading'), ENT_QUOTES) ?></span>
+					</div>
+					<p class="mt-2"><?= htmlspecialchars(__('admin.modal.loading'), ENT_QUOTES) ?></p>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= htmlspecialchars(__('admin.modal.close'), ENT_QUOTES) ?></button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+	const fieldLabels = {
+		'id': <?= json_encode(__('admin.field.id')) ?>,
+		'protocol': <?= json_encode(__('admin.field.protocol')) ?>,
+		'instance': <?= json_encode(__('admin.field.instance')) ?>,
+		'username': <?= json_encode(__('admin.field.username')) ?>,
+		'did': <?= json_encode(__('admin.field.did')) ?>,
+		'lastfm_username': <?= json_encode(__('admin.field.lastfm_username')) ?>,
+		'day_of_week': <?= json_encode(__('admin.field.day_of_week')) ?>,
+		'time': <?= json_encode(__('admin.field.time')) ?>,
+		'timezone': <?= json_encode(__('admin.field.timezone')) ?>,
+		'language': <?= json_encode(__('admin.field.language')) ?>,
+		'status': <?= json_encode(__('admin.field.status')) ?>,
+		'callback': <?= json_encode(__('admin.field.callback')) ?>,
+		'social_message': <?= json_encode(__('admin.field.social_message')) ?>,
+		'social_montage': <?= json_encode(__('admin.field.social_montage')) ?>,
+		'error_count': <?= json_encode(__('admin.field.error_count')) ?>,
+		'created_at': <?= json_encode(__('admin.field.created_at')) ?>,
+		'updated_at': <?= json_encode(__('admin.field.updated_at')) ?>
+	};
+	const noValue = <?= json_encode(__('admin.field.no_value')) ?>;
+	const errorLoading = <?= json_encode(__('admin.modal.error_loading')) ?>;
+	const loadingHtml = <?= json_encode('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">' . __('admin.modal.loading') . '</span></div><p class="mt-2">' . __('admin.modal.loading') . '</p></div>') ?>;
+
+	const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+	const displayOrder = [
+		'id', 'protocol', 'instance', 'username', 'did', 'lastfm_username',
+		'day_of_week', 'time', 'timezone', 'language', 'status',
+		'callback', 'social_message', 'social_montage', 'error_count',
+		'created_at', 'updated_at'
+	];
+
+	function formatValue(key, value) {
+		if (value === null || value === '' || value === undefined) {
+			return '<span class="text-muted">' + noValue + '</span>';
+		}
+		if (key === 'day_of_week') {
+			return dayNames[parseInt(value)] || value;
+		}
+		if (key === 'social_montage' && value) {
+			return '<a href="' + value + '" target="_blank">' + value + '</a>';
+		}
+		if (key === 'status') {
+			const statusClasses = {
+				'ACTIVE': 'bg-secondary',
+				'SCHEDULE': 'bg-success',
+				'QUEUED': 'bg-primary',
+				'SENDING': 'bg-info',
+				'ERROR': 'bg-danger'
+			};
+			const cls = statusClasses[value] || 'bg-secondary';
+			return '<span class="badge ' + cls + '">' + value + '</span>';
+		}
+		if (key === 'callback' && value) {
+			return '<code class="text-wrap" style="word-break: break-all;">' + escapeHtml(value) + '</code>';
+		}
+		return escapeHtml(String(value));
+	}
+
+	function escapeHtml(text) {
+		const div = document.createElement('div');
+		div.textContent = text;
+		return div.innerHTML;
+	}
+
+	function renderUserDetails(user) {
+		let html = '<table class="table table-bordered mb-0">';
+		html += '<tbody>';
+		
+		displayOrder.forEach(function(key) {
+			if (user.hasOwnProperty(key)) {
+				const label = fieldLabels[key] || key;
+				const value = formatValue(key, user[key]);
+				html += '<tr><th style="width: 200px;" class="bg-light">' + escapeHtml(label) + '</th><td>' + value + '</td></tr>';
+			}
+		});
+
+		html += '</tbody></table>';
+		return html;
+	}
+
+	document.querySelectorAll('.view-user-btn').forEach(function(btn) {
+		btn.addEventListener('click', function() {
+			const userId = this.getAttribute('data-user-id');
+			const modalBody = document.getElementById('userDetailsModalBody');
+			const modal = new bootstrap.Modal(document.getElementById('userDetailsModal'));
+			
+			modalBody.innerHTML = loadingHtml;
+			modal.show();
+
+			fetch('/admin/user/' + userId)
+				.then(function(response) {
+					if (!response.ok) {
+						throw new Error('HTTP ' + response.status);
+					}
+					return response.json();
+				})
+				.then(function(user) {
+					modalBody.innerHTML = renderUserDetails(user);
+				})
+				.catch(function(error) {
+					modalBody.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-2"></i>' + errorLoading + ': ' + escapeHtml(error.message) + '</div>';
+				});
+		});
+	});
+});
+</script>

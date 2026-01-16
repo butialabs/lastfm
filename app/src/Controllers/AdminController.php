@@ -109,6 +109,32 @@ final class AdminController
         return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);
     }
 
+    public function showUser(ServerRequestInterface $request, array $args): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $userId = (int) ($args['id'] ?? 0);
+        if ($userId <= 0) {
+            return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid user ID']));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'User not found']));
+        }
+
+        unset($user['password']);
+        unset($user['token']);
+
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode($user, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+
     public function loginForm(ServerRequestInterface $request): ResponseInterface
     {
         session_start_safe();
