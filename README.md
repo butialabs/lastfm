@@ -25,7 +25,6 @@ services:
       APP_URL: https://your-domain.com
       LASTFM_API: your_lastfm_api_key
       ENCRYPTION_KEY: your_32_character_encryption_key
-      MUSICBRAINZ_DEFAULT: false
       ADMIN_USER: admin
       ADMIN_PASSWORD: your_secure_password
     ports:
@@ -53,7 +52,6 @@ docker compose up -d
 | `ADMIN_USER` | Admin panel username | Yes |
 | `ADMIN_PASSWORD` | Admin panel password | Yes |
 | `TZ` | Timezone (e.g., `America/Sao_Paulo`) | No |
-| `MUSICBRAINZ_DEFAULT` | Use MusicBrainz as primary image source (`true`/`false`) | No |
 
 ### Persistent Data
 

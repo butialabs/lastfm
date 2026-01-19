@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Services\ProxyService;
 use GuzzleHttp\Client as Guzzle;
-use GuzzleHttp\Exception\RequestException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -18,7 +16,6 @@ final class LastFmService
         private readonly Guzzle $http,
         private readonly LoggerInterface $logger,
         string $basePath,
-        private readonly ProxyService $proxyService,
     ) {
         $this->cacheDir = $basePath . '/data/cache/artists';
         if (!is_dir($this->cacheDir)) {
@@ -86,38 +83,30 @@ final class LastFmService
             return $path;
         }
 
-        $musicBrainzDefault = strtolower(trim((string) ($_ENV['MUSICBRAINZ_DEFAULT'] ?? 'false')));
-        $useMusicBrainzFirst = in_array($musicBrainzDefault, ['true', '1', 'yes'], true);
+        // 1. Try Last.fm directly
+        $result = $this->fetchAndSaveFromLastFm($artistName, $path);
+        if ($result !== '') {
+            return $result;
+        }
 
-        if ($useMusicBrainzFirst) {
-            $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
-            if ($imageData !== null) {
-                file_put_contents($path, $imageData);
-                return $path;
-            }
+        // 2. Try Archive.org
+        $result = $this->fetchAndSaveFromArchiveOrg($artistName, $path);
+        if ($result !== '') {
+            return $result;
+        }
 
-            $result = $this->fetchAndSaveFromLastFm($artistName, $path);
-            if ($result !== '') {
-                return $result;
-            }
-        } else {
-            $result = $this->fetchAndSaveFromLastFm($artistName, $path);
-            if ($result !== '') {
-                return $result;
-            }
-
-            $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
-            if ($imageData !== null) {
-                file_put_contents($path, $imageData);
-                return $path;
-            }
+        // 3. MusicBrainz
+        $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
+        if ($imageData !== null) {
+            file_put_contents($path, $imageData);
+            return $path;
         }
 
         return '';
     }
 
     /**
-     * Fetch and save artist image from Last.fm.
+     * Fetch and save artist image from Last.fm
      */
     private function fetchAndSaveFromLastFm(string $artistName, string $path): string
     {
@@ -147,7 +136,7 @@ final class LastFmService
     }
 
     /**
-     * Fetch artist image URL from Last.fm artist page by scraping the og:image meta tag.
+     * Fetch artist image URL from Last.fm artist page from og:image meta tag
      */
     private function fetchArtistImageFromLastFmPage(string $artistName): ?string
     {
@@ -159,94 +148,218 @@ final class LastFmService
         
         $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
         
-        $maxRetries = 10;
-        $usedProxies = [];
+        $options = [
+            'headers' => [
+                'Accept' => 'text/html',
+                'User-Agent' => $userAgent,
+            ],
+            'timeout' => 10,
+            'connect_timeout' => 5,
+        ];
         
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-            // Get a random proxy that hasn't been used yet
-            $proxy = $this->proxyService->getRandomProxy($usedProxies);
+        try {
+            $res = $this->http->get($url, $options);
             
-            // If no proxy available (or all proxies used), try without proxy on first attempt only
-            if ($proxy === null && $attempt > 1) {
-                $this->logger->debug('No more proxies available, skipping retry');
-                break;
+            if ($res->getStatusCode() !== 200) {
+                $this->logger->debug('Last.fm artist page returned non-200', [
+                    'artist' => $artistName,
+                    'status' => $res->getStatusCode()
+                ]);
+                return null;
             }
             
-            $options = [
+            $html = (string) $res->getBody();
+            
+            if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
+                $imageUrl = $matches[1];
+                $this->logger->info('Found og:image on Last.fm artist page', [
+                    'artist' => $artistName,
+                    'imageUrl' => $imageUrl
+                ]);
+                return $imageUrl;
+            }
+            
+            if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
+                $imageUrl = $matches[1];
+                $this->logger->info('Found og:image on Last.fm artist page (alt)', [
+                    'artist' => $artistName,
+                    'imageUrl' => $imageUrl
+                ]);
+                return $imageUrl;
+            }
+            
+            $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
+            return null;
+            
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to fetch Last.fm artist page', [
+                'artist' => $artistName,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Fetch and save artist image using Archive.org
+     */
+    private function fetchAndSaveFromArchiveOrg(string $artistName, string $path): string
+    {
+        $appUrl = trim((string) ($_ENV['APP_URL'] ?? 'https://lastfm.blue'));
+        $userAgent = 'LastFM.blue/1.0 ( ' . $appUrl . ' )';
+        
+        $artistSlug = rawurlencode($artistName);
+        $lastFmUrl = 'https://www.last.fm/music/' . $artistSlug;
+        
+        $this->logger->debug('Checking Archive.org for Last.fm artist page', ['url' => $lastFmUrl]);
+        
+        $options = [
+            'headers' => [
+                'Accept' => 'application/json',
+                'User-Agent' => $userAgent,
+            ],
+            'timeout' => 15,
+            'connect_timeout' => 5,
+        ];
+        
+        try {
+            $waybackApiUrl = 'https://archive.org/wayback/available?url=' . urlencode($lastFmUrl);
+            $res = $this->http->get($waybackApiUrl, $options);
+            
+            if ($res->getStatusCode() !== 200) {
+                $this->logger->debug('Archive.org API returned non-200', [
+                    'status' => $res->getStatusCode()
+                ]);
+                return '';
+            }
+            
+            $data = json_decode((string) $res->getBody(), true);
+            $snapshotUrl = $data['archived_snapshots']['closest']['url'] ?? null;
+            
+            if ($snapshotUrl === null) {
+                $this->logger->debug('No Archive.org snapshot available', ['artist' => $artistName]);
+                return '';
+            }
+            
+            $this->logger->debug('Found Archive.org snapshot', ['url' => $snapshotUrl]);
+            
+            $htmlOptions = [
                 'headers' => [
                     'Accept' => 'text/html',
                     'User-Agent' => $userAgent,
                 ],
-                'timeout' => 10,
+                'timeout' => 15,
                 'connect_timeout' => 5,
             ];
             
-            if ($proxy !== null) {
-                $options['proxy'] = $proxy;
-                $usedProxies[] = $proxy;
-                $this->logger->debug('Using proxy for Last.fm page fetch', [
-                    'proxy' => $proxy,
-                    'attempt' => $attempt
+            $res = $this->http->get($snapshotUrl, $htmlOptions);
+            
+            if ($res->getStatusCode() !== 200) {
+                $this->logger->debug('Archive.org snapshot page returned non-200', [
+                    'status' => $res->getStatusCode()
+                ]);
+                return '';
+            }
+            
+            $html = (string) $res->getBody();
+            
+            $archiveImageUrl = null;
+            if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
+                $archiveImageUrl = $matches[1];
+            } elseif (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
+                $archiveImageUrl = $matches[1];
+            }
+            
+            if ($archiveImageUrl === null) {
+                $this->logger->debug('No og:image found in Archive.org snapshot', ['artist' => $artistName]);
+                return '';
+            }
+            
+            $this->logger->debug('Found og:image in Archive.org snapshot', ['imageUrl' => $archiveImageUrl]);
+            
+            $directImageUrl = $this->extractDirectUrlFromArchive($archiveImageUrl);
+            
+            if ($directImageUrl !== null) {
+                $this->logger->debug('Trying direct image URL', ['url' => $directImageUrl]);
+                
+                try {
+                    $res = $this->http->get($directImageUrl, [
+                        'headers' => [
+                            'Accept' => 'image/*',
+                            'User-Agent' => $userAgent,
+                        ],
+                        'timeout' => 10,
+                        'connect_timeout' => 5,
+                    ]);
+                    
+                    if ($res->getStatusCode() >= 200 && $res->getStatusCode() < 300) {
+                        $bin = (string) $res->getBody();
+                        if ($bin !== '') {
+                            file_put_contents($path, $bin);
+                            $this->logger->info('Downloaded image from direct URL', [
+                                'artist' => $artistName,
+                                'url' => $directImageUrl
+                            ]);
+                            return $path;
+                        }
+                    }
+                } catch (Throwable $e) {
+                    $this->logger->debug('Direct image URL download failed', [
+                        'url' => $directImageUrl,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+            
+            $this->logger->debug('Trying Archive.org image URL', ['url' => $archiveImageUrl]);
+            
+            try {
+                $res = $this->http->get($archiveImageUrl, [
+                    'headers' => [
+                        'Accept' => 'image/*',
+                        'User-Agent' => $userAgent,
+                    ],
+                    'timeout' => 15,
+                    'connect_timeout' => 5,
+                ]);
+                
+                if ($res->getStatusCode() >= 200 && $res->getStatusCode() < 300) {
+                    $bin = (string) $res->getBody();
+                    if ($bin !== '') {
+                        file_put_contents($path, $bin);
+                        $this->logger->info('Downloaded image from Archive.org', [
+                            'artist' => $artistName,
+                            'url' => $archiveImageUrl
+                        ]);
+                        return $path;
+                    }
+                }
+            } catch (Throwable $e) {
+                $this->logger->warning('Archive.org image download failed', [
+                    'url' => $archiveImageUrl,
+                    'error' => $e->getMessage()
                 ]);
             }
             
-            try {
-                $res = $this->http->get($url, $options);
-                
-                if ($res->getStatusCode() !== 200) {
-                    $this->logger->debug('Last.fm artist page returned non-200', [
-                        'artist' => $artistName,
-                        'status' => $res->getStatusCode()
-                    ]);
-                    return null;
-                }
-                
-                $html = (string) $res->getBody();
-                
-                // Extract og:image (existing regex logic)
-                if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
-                    $imageUrl = $matches[1];
-                    $this->logger->info('Found og:image on Last.fm artist page', [
-                        'artist' => $artistName,
-                        'imageUrl' => $imageUrl
-                    ]);
-                    return $imageUrl;
-                }
-                
-                if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
-                    $imageUrl = $matches[1];
-                    $this->logger->info('Found og:image on Last.fm artist page (alt)', [
-                        'artist' => $artistName,
-                        'imageUrl' => $imageUrl
-                    ]);
-                    return $imageUrl;
-                }
-                
-                $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
-                return null;
-                
-            } catch (\GuzzleHttp\Exception\RequestException $e) {
-                // Any request exception (including proxy failures) - retry with different proxy
-                $this->logger->warning('Proxy request failed, retrying...', [
-                    'proxy' => $proxy,
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage()
-                ]);
-                continue;
-            } catch (Throwable $e) {
-                // Other errors (non-HTTP) - don't retry
-                $this->logger->warning('Failed to fetch Last.fm artist page', [
-                    'artist' => $artistName,
-                    'error' => $e->getMessage()
-                ]);
-                return null;
-            }
+        } catch (Throwable $e) {
+            $this->logger->warning('Archive.org fetch failed', [
+                'artist' => $artistName,
+                'error' => $e->getMessage()
+            ]);
         }
         
-        $this->logger->warning('All proxy attempts failed for Last.fm artist page', [
-            'artist' => $artistName,
-            'attempts' => $maxRetries
-        ]);
+        return '';
+    }
+
+    /**
+     * Extract direct URL from Archive.org URL format
+     */
+    private function extractDirectUrlFromArchive(string $archiveUrl): ?string
+    {
+        if (preg_match('#https?://web\.archive\.org/web/\d+(?:im_|id_|if_|js_|cs_)?/(https?://.+)#i', $archiveUrl, $matches)) {
+            return $matches[1];
+        }
+        
         return null;
     }
 

@@ -17,7 +17,6 @@ use App\Services\I18nService;
 use App\Services\LastFmService;
 use App\Services\LoggerFactory;
 use App\Services\MontageService;
-use App\Services\ProxyService;
 use App\Services\Social\BlueskyClient;
 use App\Services\Social\MastodonClient;
 use Dotenv\Dotenv;
@@ -71,14 +70,10 @@ final class App
             ]);
         });
 
-        $container->add(ProxyService::class)
-            ->addArgument(LoggerInterface::class);
-
         $container->add(LastFmService::class)
             ->addArgument(GuzzleClient::class)
             ->addArgument(LoggerInterface::class)
-            ->addArgument('basePath')
-            ->addArgument(ProxyService::class);
+            ->addArgument('basePath');
 
         $container->add(MontageService::class)
             ->addArgument(LoggerInterface::class)

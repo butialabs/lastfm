@@ -17,7 +17,7 @@ $climate->description('LastFM CLI');
 
 $climate->arguments->add([
     'command' => [
-        'description' => 'Command to execute (users, send, proxy)',
+        'description' => 'Command to execute (users, send)',
         'required' => false,
     ],
     'schedule' => [
@@ -41,11 +41,6 @@ $climate->arguments->add([
         'longPrefix' => 'id',
         'description' => 'User ID for force send',
         'castTo' => 'int',
-    ],
-    'refresh' => [
-        'longPrefix' => 'refresh',
-        'description' => 'Refresh proxy list from remote source',
-        'noValue' => true,
     ],
     'help' => [
         'prefix' => 'h',
@@ -122,30 +117,11 @@ try {
         exit(0);
     }
 
-    // php bin/lastfm proxy --refresh 
-    if ($command === 'proxy') {
-        if ($climate->arguments->get('refresh')) {
-            $climate->info('🔄 Refreshing proxy list...');
-            $proxyService = $container->get(\App\Services\ProxyService::class);
-            $result = $proxyService->refresh();
-            if ($result) {
-                $climate->green('✅ Proxy list refreshed successfully.');
-            } else {
-                $climate->yellow('⚠️ Proxy list refresh skipped (PROXY_PROVIDER or PROXY_URL not configured).');
-            }
-            exit(0);
-        }
-
-        $climate->error('Unknown proxy command. Use --refresh to refresh the proxy list.');
-        exit(1);
-    }
-
     $climate->br();
     $climate->bold()->out('Usage:');
     $climate->tab()->out('php bin/lastfm users --schedule    Process scheduled users');
     $climate->tab()->out('php bin/lastfm users --send        Send queued messages');
     $climate->tab()->out('php bin/lastfm send --force --id=<user_id>  Force send for specific user');
-    $climate->tab()->out('php bin/lastfm proxy --refresh     Refresh proxy list from remote source');
     $climate->br();
     $climate->usage();
     exit(2);

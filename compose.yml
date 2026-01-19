@@ -7,7 +7,6 @@ services:
       APP_URL: ${APP_URL:-https://lastfm.blue}
       LASTFM_API: ${LASTFM_API:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
-      MUSICBRAINZ_DEFAULT: ${MUSICBRAINZ_DEFAULT:-false}
       ADMIN_USER: ${ADMIN_USER:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
