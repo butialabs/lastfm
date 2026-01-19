@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Services\ProxyService;
 use GuzzleHttp\Client as Guzzle;
+use GuzzleHttp\Exception\RequestException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -16,6 +18,7 @@ final class LastFmService
         private readonly Guzzle $http,
         private readonly LoggerInterface $logger,
         string $basePath,
+        private readonly ProxyService $proxyService,
     ) {
         $this->cacheDir = $basePath . '/data/cache/artists';
         if (!is_dir($this->cacheDir)) {
@@ -151,43 +154,99 @@ final class LastFmService
         $appUrl = trim((string) ($_ENV['APP_URL'] ?? 'https://lastfm.blue'));
         $userAgent = 'LastFM.blue/1.0 ( ' . $appUrl . ' )';
         
-        try {
-            $artistSlug = rawurlencode($artistName);
-            $url = 'https://www.last.fm/music/' . $artistSlug;
+        $artistSlug = rawurlencode($artistName);
+        $url = 'https://www.last.fm/music/' . $artistSlug;
+        
+        $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
+        
+        $maxRetries = 10;
+        $usedProxies = [];
+        
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            // Get a random proxy that hasn't been used yet
+            $proxy = $this->proxyService->getRandomProxy($usedProxies);
             
-            $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
+            // If no proxy available (or all proxies used), try without proxy on first attempt only
+            if ($proxy === null && $attempt > 1) {
+                $this->logger->debug('No more proxies available, skipping retry');
+                break;
+            }
             
-            $res = $this->http->get($url, [
+            $options = [
                 'headers' => [
                     'Accept' => 'text/html',
                     'User-Agent' => $userAgent,
                 ],
-            ]);
+                'timeout' => 10,
+                'connect_timeout' => 5,
+            ];
             
-            if ($res->getStatusCode() !== 200) {
-                $this->logger->debug('Last.fm artist page returned non-200', ['artist' => $artistName, 'status' => $res->getStatusCode()]);
+            if ($proxy !== null) {
+                $options['proxy'] = $proxy;
+                $usedProxies[] = $proxy;
+                $this->logger->debug('Using proxy for Last.fm page fetch', [
+                    'proxy' => $proxy,
+                    'attempt' => $attempt
+                ]);
+            }
+            
+            try {
+                $res = $this->http->get($url, $options);
+                
+                if ($res->getStatusCode() !== 200) {
+                    $this->logger->debug('Last.fm artist page returned non-200', [
+                        'artist' => $artistName,
+                        'status' => $res->getStatusCode()
+                    ]);
+                    return null;
+                }
+                
+                $html = (string) $res->getBody();
+                
+                // Extract og:image (existing regex logic)
+                if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
+                    $imageUrl = $matches[1];
+                    $this->logger->info('Found og:image on Last.fm artist page', [
+                        'artist' => $artistName,
+                        'imageUrl' => $imageUrl
+                    ]);
+                    return $imageUrl;
+                }
+                
+                if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
+                    $imageUrl = $matches[1];
+                    $this->logger->info('Found og:image on Last.fm artist page (alt)', [
+                        'artist' => $artistName,
+                        'imageUrl' => $imageUrl
+                    ]);
+                    return $imageUrl;
+                }
+                
+                $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
+                return null;
+                
+            } catch (\GuzzleHttp\Exception\RequestException $e) {
+                // Any request exception (including proxy failures) - retry with different proxy
+                $this->logger->warning('Proxy request failed, retrying...', [
+                    'proxy' => $proxy,
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage()
+                ]);
+                continue;
+            } catch (Throwable $e) {
+                // Other errors (non-HTTP) - don't retry
+                $this->logger->warning('Failed to fetch Last.fm artist page', [
+                    'artist' => $artistName,
+                    'error' => $e->getMessage()
+                ]);
                 return null;
             }
-            
-            $html = (string) $res->getBody();
-            
-            if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
-                $imageUrl = $matches[1];
-                $this->logger->info('Found og:image on Last.fm artist page', ['artist' => $artistName, 'imageUrl' => $imageUrl]);
-                return $imageUrl;
-            }
-            
-            if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
-                $imageUrl = $matches[1];
-                $this->logger->info('Found og:image on Last.fm artist page (alt)', ['artist' => $artistName, 'imageUrl' => $imageUrl]);
-                return $imageUrl;
-            }
-            
-            $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
-        } catch (Throwable $e) {
-            $this->logger->warning('Failed to fetch Last.fm artist page', ['artist' => $artistName, 'error' => $e->getMessage()]);
         }
         
+        $this->logger->warning('All proxy attempts failed for Last.fm artist page', [
+            'artist' => $artistName,
+            'attempts' => $maxRetries
+        ]);
         return null;
     }
 

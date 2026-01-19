@@ -3,3 +3,6 @@
 
 # Send scheduled
 * * * * * /usr/local/bin/php /app/bin/lastfm users --send 2>&1 | tee -a /tmp/send.log
+
+# Refresh proxy list daily
+0 0 * * * /usr/local/bin/php /app/bin/lastfm proxy --refresh 2>&1 | tee -a /tmp/proxy.log
