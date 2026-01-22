@@ -268,7 +268,7 @@
 				</ul>
 			</nav>
 			<p class="text-center text-muted small pb-2 m-0">
-				<?= htmlspecialchars(str_replace(['{current}', '{total}', '{count}'], [$currentPage, $totalPages, $totalFiltered], __('admin.pagination.page_of')), ENT_QUOTES) ?>
+				<?= htmlspecialchars(__('admin.pagination.page_of', [$currentPage, $totalPages, $totalFiltered]), ENT_QUOTES) ?>
 			</p>
 		<?php endif; ?>
 	</div>

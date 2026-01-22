@@ -147,7 +147,7 @@ final class QueueProcessor
         }
 
         $artistList = implode(' ', $artistParts);
-        $scrobblesText = __('post.scrobbles', ['count' => $totalScrobbles], $language);
+        $scrobblesText = __('post.scrobbles', [$totalScrobbles], $language);
 
         return sprintf(
             '♫ %s: %s. #myweekcounted %s #music %s %s',

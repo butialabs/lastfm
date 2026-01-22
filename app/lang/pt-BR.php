@@ -8,7 +8,7 @@ return [
     'app.language' => 'Idioma',
 
     'footer.made_with_love' => 'Feito com ❤️ por',
-    'footer.total_users' => '{count} usuário|{count} usuários',
+    'footer.total_users' => '%d usuário|%d usuários',
 
     'login.bluesky.title' => 'Entrar com Bluesky',
     'login.mastodon.title' => 'Entrar com Mastodon',
@@ -16,10 +16,12 @@ return [
     'login.username' => 'Usuário',
     'login.password' => 'Senha',
     'login.button' => 'Entrar',
-    'placeholder_username' => 'Usuário (ex.: chewbacca.bsky.social)',
+    'placeholder_username' => 'Identificador (nome de usuário, e-mail ou DID)',
     'placeholder_password' => 'Senha',
     'placeholder_instance_mastodon' => 'URL da instância (ex.: https://mastodon.social)',
     'placeholder_instance_atproto' => 'URL da instância (ex.: https://bsky.social)',
+    'login.bluesky.app_password' => 'Você precisará gerar uma %s para fazer login, isso é para sua própria segurança.',
+    'login.bluesky.app_password_link' => 'Senha de App',
 
     'settings.title' => 'Configurações',
     'settings.logout' => 'Sair',
@@ -52,7 +54,7 @@ return [
 
     'post.intro' => 'Meus top artistas desta semana no Last.fm',
     'post.top_artists' => 'Top 5 artistas da Last.week',
-    'post.scrobbles' => ':count Scrobbles com Lastfm',
+    'post.scrobbles' => '%d Scrobbles com Lastfm',
     'post.via' => 'via',
     'post.plays' => 'reproduções',
 
@@ -96,7 +98,7 @@ return [
     'admin.table.dates' => 'Datas',
     'admin.table.no_users' => 'Nenhum usuário encontrado',
     'admin.table.view_profile' => 'Ver perfil',
-    'admin.pagination.page_of' => 'Página {current} de {total} ({count} usuários)',
+    'admin.pagination.page_of' => 'Página %1$d de %2$d (%3$d usuários)',
     'admin.status.active' => 'Ativo',
     'admin.status.schedule' => 'Agendado',
     'admin.status.queued' => 'Na Fila',

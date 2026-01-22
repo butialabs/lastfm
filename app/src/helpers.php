@@ -8,6 +8,8 @@ if (!function_exists('__')) {
      *
      * Note: The heavy lifting is done by App\Services\I18nService. This helper is used
      * mostly by templates, where the container is not easily available.
+     *
+     * Supports sprintf format for placeholders (%s, %d, %1$s, etc.)
      */
     function __(string $key, array $params = [], ?string $locale = null): string
     {
@@ -33,8 +35,8 @@ if (!function_exists('__')) {
             $text = $fallbackTranslations[$key] ?? $key;
         }
 
-        foreach ($params as $param => $value) {
-            $text = str_replace(':' . $param, (string) $value, $text);
+        if (!empty($params)) {
+            $text = sprintf($text, ...array_values($params));
         }
 
         return $text;
@@ -52,24 +54,21 @@ if (!function_exists('trans_choice')) {
     /**
      * Pluralization helper.
      *
-     * Supports format: "singular|plural" with {count} placeholder.
-     * Example: "{count} active user|{count} active users"
+     * Supports format: "singular|plural" with sprintf placeholders.
+     * Example: "%d active user|%d active users"
      */
     function trans_choice(string $key, int $count, array $params = [], ?string $locale = null): string
     {
         $text = __($key, [], $locale);
-        $params['count'] = $count;
 
         if (str_contains($text, '|')) {
             $parts = explode('|', $text);
             $text = $count === 1 ? $parts[0] : ($parts[1] ?? $parts[0]);
         }
 
-        foreach ($params as $param => $value) {
-            $text = str_replace('{' . $param . '}', (string) $value, $text);
-        }
+        $allParams = array_merge([$count], array_values($params));
 
-        return $text;
+        return sprintf($text, ...$allParams);
     }
 }
 
