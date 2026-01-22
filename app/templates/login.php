@@ -39,7 +39,7 @@ $protocol = flash('flash_protocol');
             <div>
                 <input type="hidden" name="protocol" value="mastodon">
                 <div class="form-row">
-                    <input name="instance" placeholder="https://mastodon.social" value="https://mastodon.social" required />
+                    <input name="instance" placeholder="<?= htmlspecialchars(__('placeholder_instance_mastodon'), ENT_QUOTES) ?>" value="https://mastodon.social" required />
                     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('login.button'), ENT_QUOTES) ?></button>
                 </div>
             </div>
@@ -61,11 +61,11 @@ $protocol = flash('flash_protocol');
             <div>
                 <input type="hidden" name="protocol" value="at">
                 <div class="form-row">
-                    <input name="instance" placeholder="https://bsky.social" value="https://bsky.social" required />
+                    <input name="instance" placeholder="<?= htmlspecialchars(__('placeholder_instance_atproto'), ENT_QUOTES) ?>" value="https://bsky.social" required />
                 </div>
                 <div class="form-row">
-                    <input name="username" placeholder="chewbacca" required />
-                    <input type="password" name="password" required />
+                    <input name="username" placeholder="<?= htmlspecialchars(__('placeholder_username'), ENT_QUOTES) ?>" required />
+                    <input type="password" name="password" placeholder="<?= htmlspecialchars(__('placeholder_password'), ENT_QUOTES) ?>" required />
                     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('login.button'), ENT_QUOTES) ?></button>
                 </div>
             </div>

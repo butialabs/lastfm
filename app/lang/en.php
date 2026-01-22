@@ -16,6 +16,10 @@ return [
     'login.username' => 'Username',
     'login.password' => 'Password',
     'login.button' => 'Login',
+    'placeholder_username' => 'Username (e.g.: chewbacca.bsky.social)',
+    'placeholder_password' => 'Password',
+    'placeholder_instance_mastodon' => 'Instance URL (e.g.: https://mastodon.social)',
+    'placeholder_instance_atproto' => 'Instance URL (e.g.: https://bsky.social)',
 
     'settings.title' => 'Settings',
     'settings.logout' => 'Logout',
