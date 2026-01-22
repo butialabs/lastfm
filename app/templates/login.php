@@ -68,6 +68,7 @@ $protocol = flash('flash_protocol');
                     <input type="password" name="password" placeholder="<?= htmlspecialchars(__('placeholder_password'), ENT_QUOTES) ?>" required />
                     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('login.button'), ENT_QUOTES) ?></button>
                 </div>
+                <p class="at_alert_app_password"><?= sprintf(__('login.bluesky.app_password'), '<a href="https://bsky.app/settings/app-passwords" target="_blank">' . htmlspecialchars(__('login.bluesky.app_password_link'), ENT_QUOTES) . '</a>') ?></p>
             </div>
         </form>
     </div>
