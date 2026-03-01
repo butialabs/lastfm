@@ -93,19 +93,28 @@ final class MastodonClient
         }
         return $json;
     }
-
-    public function uploadMedia(string $instance, string $token, string $absoluteImagePath): string
+    public function uploadMedia(string $instance, string $token, string $absoluteImagePath, ?string $altText = null): string
     {
         $base = $this->normalizeInstance($instance);
+        
+        $multipart = [
+            [
+                'name' => 'file',
+                'contents' => Utils::tryFopen($absoluteImagePath, 'r'),
+                'filename' => basename($absoluteImagePath),
+            ],
+        ];
+        
+        if ($altText !== null) {
+            $multipart[] = [
+                'name' => 'description',
+                'contents' => $altText,
+            ];
+        }
+        
         $res = $this->http->post($base . '/api/v2/media', [
             'headers' => ['Authorization' => 'Bearer ' . $token],
-            'multipart' => [
-                [
-                    'name' => 'file',
-                    'contents' => Utils::tryFopen($absoluteImagePath, 'r'),
-                    'filename' => basename($absoluteImagePath),
-                ],
-            ],
+            'multipart' => $multipart,
         ]);
         $json = json_decode((string) $res->getBody(), true);
         if (!is_array($json) || !isset($json['id'])) {

@@ -87,6 +87,10 @@ final class QueueProcessor
                 throw new \RuntimeException('Montage file not found');
             }
 
+            $username = (string) ($user['lastfm_username'] ?? '');
+            $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
+            $altText = $this->generateAltText($chart, $language);
+
             if ($protocol === 'at') {
                 $password = $this->crypto->decrypt((string) $user['password']);
                 $session = $this->bluesky->createSession($instance, (string) $user['username'], $password);
@@ -95,14 +99,14 @@ final class QueueProcessor
                 $root = null;
                 $parent = null;
                 foreach ($threads as $i => $chunk) {
-                    $embed = $i === 0 ? $this->bluesky->makeImageEmbed($imageData['blob'], alt: 'Weekly chart', width: $imageData['width'], height: $imageData['height']) : null;
+                    $embed = $i === 0 ? $this->bluesky->makeImageEmbed($imageData['blob'], alt: $altText, width: $imageData['width'], height: $imageData['height']) : null;
                     $result = $this->bluesky->createPost($instance, $session['did'], $session['accessJwt'], $chunk, $embed, $root, $parent);
                     $root = $root ?? ['uri' => $result['uri'], 'cid' => $result['cid']];
                     $parent = ['uri' => $result['uri'], 'cid' => $result['cid']];
                 }
             } elseif ($protocol === 'mastodon') {
                 $token = $this->crypto->decrypt((string) $user['token']);
-                $mediaId = $this->mastodon->uploadMedia($instance, $token, $montageFilePath);
+                $mediaId = $this->mastodon->uploadMedia($instance, $token, $montageFilePath, $altText);
 
                 $inReplyTo = null;
                 foreach ($threads as $i => $chunk) {
@@ -157,6 +161,14 @@ final class QueueProcessor
             __('post.via', [], $language),
             $mention
         );
+    }
+
+    private function generateAltText(array $chart, string $language): string
+    {
+        $artistNames = array_map(fn($artist) => $artist['name'], $chart);
+        $artistList = implode(', ', $artistNames);
+        
+        return __('post.alt_text', [$artistList], $language);
     }
 
     /** @return list<string> */

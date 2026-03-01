@@ -57,6 +57,7 @@ return [
     'post.scrobbles' => '%d Scrobbles with Lastfm',
     'post.via' => 'via',
     'post.plays' => 'plays',
+    'post.alt_text' => 'Collage of photos of the bands %s',
 
     'auth.logged_in' => 'Logged in successfully.',
     'auth.logged_out' => 'Logged out.',
