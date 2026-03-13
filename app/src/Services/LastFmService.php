@@ -75,6 +75,30 @@ final class LastFmService
         return $out;
     }
 
+    public function getWeeklyTotalScrobbles(string $username): int
+    {
+        $data = $this->call('user.getweeklyartistchart', ['user' => $username]);
+        $artists = $data['weeklyartistchart']['artist'] ?? [];
+        if (!is_array($artists)) {
+            return 0;
+        }
+
+        if (isset($artists['name'])) {
+            $artists = [$artists];
+        }
+
+        $total = 0;
+        foreach ($artists as $a) {
+            if (!is_array($a)) {
+                continue;
+            }
+            $playcount = (int) ($a['playcount'] ?? 0);
+            $total += $playcount;
+        }
+
+        return $total;
+    }
+
     public function getArtistImagePath(string $artistName, ?string $imageUrl = null, ?string $mbid = null): string
     {
         $hash = md5(strtolower(trim($artistName)));

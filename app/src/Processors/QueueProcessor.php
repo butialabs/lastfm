@@ -143,11 +143,10 @@ final class QueueProcessor
 
         $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
         $artistParts = [];
-        $totalScrobbles = 0;
+        $totalScrobbles = $this->lastfm->getWeeklyTotalScrobbles($username);
 
         foreach ($chart as $a) {
             $artistParts[] = sprintf('%s (%d)', $a['name'], $a['playcount']);
-            $totalScrobbles += (int) $a['playcount'];
         }
 
         $artistList = implode(' ', $artistParts);
