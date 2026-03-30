@@ -407,7 +407,7 @@ final class LastFmService
         
         try {
             if ($mbid === null || $mbid === '') {
-                $searchUrl = $apiBase . '/artist/?query=' . urlencode('artist:' . $artistName) . '&fmt=json&limit=1';
+                $searchUrl = $apiBase . '/artist/?query=' . urlencode('artist:' . $artistName) . '&type=artist&fmt=json&limit=5';
                 $this->logger->debug('MusicBrainz artist search', ['url' => $searchUrl]);
                 
                 $res = $this->http->get($searchUrl, $httpOptions);
@@ -417,10 +417,33 @@ final class LastFmService
                 }
                 
                 $data = json_decode((string) $res->getBody(), true);
-                $mbid = $data['artists'][0]['id'] ?? null;
+                $artists = $data['artists'] ?? [];
+                
+                if (empty($artists)) {
+                    $this->logger->debug('MusicBrainz: artist not found', ['artist' => $artistName]);
+                    return null;
+                }
+                
+                $searchName = $this->normalizeArtistName($artistName);
+                $mbid = null;
+                foreach ($artists as $candidate) {
+                    $candidateName = $this->normalizeArtistName($candidate['name'] ?? '');
+                    if ($candidateName === $searchName) {
+                        $mbid = $candidate['id'];
+                        $this->logger->debug('MusicBrainz: name match found', [
+                            'artist' => $artistName,
+                            'matched' => $candidate['name'],
+                            'mbid' => $mbid,
+                        ]);
+                        break;
+                    }
+                }
                 
                 if ($mbid === null) {
-                    $this->logger->debug('MusicBrainz: artist not found', ['artist' => $artistName]);
+                    $this->logger->debug('MusicBrainz: no name match in results', [
+                        'artist' => $artistName,
+                        'results' => array_column($artists, 'name'),
+                    ]);
                     return null;
                 }
                 
@@ -469,6 +492,20 @@ final class LastFmService
         }
 
         return null;
+    }
+
+    /**
+     * Normalize artist name for comparison (lowercase, normalize Unicode hyphens).
+     */
+    private function normalizeArtistName(string $name): string
+    {
+        $name = mb_strtolower(trim($name));
+        $name = str_replace(
+            ["\xE2\x80\x90", "\xE2\x80\x91", "\xE2\x80\x92", "\xE2\x80\x93", "\xE2\x80\x94", "\xEF\xBC\x8D"],
+            '-',
+            $name,
+        );
+        return $name;
     }
 
     /** @param mixed $images */
