@@ -1,17 +1,7 @@
 <?php $this->layout('admin/layout') ?>
 
-<div class="container py-4">
-	<div class="d-flex justify-content-between align-items-center mb-4">
-		<h1 class="h4">
-			<span class="text-muted">d-_-b</span> <?= htmlspecialchars(__('admin.dashboard'), ENT_QUOTES) ?>
-		</h1>
-		<form method="post" action="/admin/logout">
-			<button type="submit" class="btn btn-outline-secondary btn-sm"><?= htmlspecialchars(__('admin.logout'), ENT_QUOTES) ?></button>
-		</form>
-	</div>
-
 	<div class="row mb-4">
-		<div class="col-md-3">
+		<div class="col">
 			<div class="card bg-primary text-white">
 				<div class="card-body d-flex align-items-center">
 					<i class="bi bi-people-fill" style="font-size: 2.5rem; opacity: 0.7;"></i>
@@ -22,7 +12,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="col-md-3">
+		<div class="col">
 			<div class="card bg-success text-white">
 				<div class="card-body d-flex align-items-center">
 					<i class="bi bi-check-circle-fill" style="font-size: 2.5rem; opacity: 0.7;"></i>
@@ -33,7 +23,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="col-md-3">
+		<div class="col">
 			<div class="card bg-info text-white">
 				<div class="card-body d-flex align-items-center">
 					<i class="bi bi-cloud-fill" style="font-size: 2.5rem; opacity: 0.7;"></i>
@@ -44,7 +34,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="col-md-3">
+		<div class="col">
 			<div class="card bg-warning text-dark">
 				<div class="card-body d-flex align-items-center">
 					<i class="bi bi-mastodon" style="font-size: 2.5rem; opacity: 0.7;"></i>
@@ -55,7 +45,19 @@
 				</div>
 			</div>
 		</div>
+		<div class="col">
+			<div class="card bg-info text-white">
+				<div class="card-body d-flex align-items-center">
+					<i class="bi bi-music-note-list" style="font-size: 2.5rem; opacity: 0.7;"></i>
+					<div class="ms-3">
+						<h5 class="card-title mb-0"><?= htmlspecialchars(__('admin.artists.title'), ENT_QUOTES) ?></h5>
+						<p class="card-text display-6 mb-0"><?= $totalArtists ?? 0 ?></p>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
+
 
 	<div class="card mb-4">
 		<div class="card-body">

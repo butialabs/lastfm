@@ -131,5 +131,59 @@ return [
     'admin.field.created_at' => 'Criado Em',
     'admin.field.updated_at' => 'Atualizado Em',
     'admin.field.no_value' => '(vazio)',
-];
+    
+    // Artist management
+    'admin.artists.title' => 'Artistas',
+    'admin.artists.statistics_title' => 'Estatísticas',
+    'admin.artists.manage' => 'Gerenciar Artistas',
+    'admin.artists.search_placeholder' => 'Buscar por nome do artista...',
+    'admin.artists.no_artists' => 'Nenhum artista encontrado',
+    'admin.artists.no_stats' => 'Nenhuma estatística disponível',
+    'admin.artists.view_details' => 'Ver Detalhes do Artista',
+    'admin.artists.regenerate_image' => 'Regenerar Imagem',
+    'admin.artists.regenerate_image_title' => 'Regenerar Imagem do Artista',
+    'admin.artists.regenerate_image_text' => 'Escolha uma fonte para regenerar a imagem do artista:',
+    'admin.artists.image_source' => 'Fonte da Imagem',
+    'admin.artists.regenerate_button' => 'Regenerar',
+    'admin.artists.regenerate_success' => 'Imagem regenerada com sucesso!',
+    'admin.artists.regenerate_error' => 'Falha ao regenerar imagem. Tente outra fonte.',
+    'admin.artists.view_statistics' => 'Ver Estatísticas',
+    'admin.artists.recent_stats' => 'Aparições Recentes',
+    'admin.artists.lastfm_url' => 'URL do Last.fm',
+    'admin.artists.musicbrainz_id' => 'ID do MusicBrainz',
+    'admin.artists.image_hash' => 'Hash da Imagem',
+    'admin.back_to_artists' => 'Voltar para Artistas',
+    'admin.back_to_dashboard' => 'Voltar para o Painel',
+    'admin.processing' => 'Processando...',
+    'admin.created' => 'Criado',
+    'admin.updated' => 'Atualizado',
 
+    // Artist table headers
+    'admin.artists.table.image' => 'Imagem',
+    'admin.artists.table.name' => 'Nome',
+    'admin.artists.table.lastfm' => 'Last.fm',
+    'admin.artists.table.musicbrainz' => 'MusicBrainz',
+
+    // Artist statistics
+    'admin.artists.stats.date' => 'Data',
+    'admin.artists.stats.user' => 'Usuário',
+    'admin.artists.stats.position' => 'Posição',
+    'admin.artists.stats.plays' => 'Reproduções',
+    'admin.artists.stats.appearances' => 'Aparições',
+    'admin.artists.stats.avg_position' => 'Posição Média',
+    'admin.artists.stats.total_plays' => 'Total de Reproduções',
+
+    // Image sources
+    'admin.artists.source.lastfm' => 'Last.fm',
+    'admin.artists.source.archive' => 'Archive.org',
+    'admin.artists.source.musicbrainz' => 'MusicBrainz',
+
+    // Filters
+    'admin.filter.from_date' => 'Data Inicial',
+    'admin.filter.to_date' => 'Data Final',
+
+    // Pagination
+    'admin.pagination.navigation' => 'Navegação de páginas',
+    'admin.pagination.previous' => 'Anterior',
+    'admin.pagination.next' => 'Próxima',
+];

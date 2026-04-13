@@ -71,7 +71,7 @@ final class UserProcessor
                 return false;
             }
 
-            $chart = $this->lastfm->getWeeklyArtistChart($lastfmUsername, 5);
+            $chart = $this->lastfm->getWeeklyArtistChart($lastfmUsername, 5, $userId);
             if ($chart === []) {
                 $this->users->setCallback($userId, 'No weekly chart data');
                 return false;

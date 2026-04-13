@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Database\ConnectionFactory;
+use App\Repositories\ArtistRepository;
 use League\Plates\Engine;
 use Nyholm\Psr7\Response;
 use PDO;
@@ -18,6 +19,7 @@ final class AdminController
     public function __construct(
         ConnectionFactory $db,
         private readonly Engine $views,
+        private readonly ArtistRepository $artistRepository,
     ) {
         $this->pdo = $db->pdo();
     }
@@ -94,6 +96,8 @@ final class AdminController
 
         $totalPages = (int) ceil($totalFiltered / $filters['limit']);
 
+        $totalArtists = $this->artistRepository->countAll();
+
         $html = $this->views->render('admin/dashboard', [
             'users' => $users,
             'totalUsers' => $totalUsers,
@@ -104,6 +108,7 @@ final class AdminController
             'currentPage' => $filters['page'],
             'totalPages' => $totalPages,
             'totalFiltered' => $totalFiltered,
+            'totalArtists' => $totalArtists,
         ]);
 
         return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);

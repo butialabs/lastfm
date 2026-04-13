@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Bootstrap;
 
 use App\Controllers\AdminController;
+use App\Controllers\ArtistController;
 use App\Controllers\AuthController;
 use App\Controllers\MontageController;
 use App\Controllers\SettingsController;
 use App\Database\ConnectionFactory;
 use App\Processors\QueueProcessor;
 use App\Processors\UserProcessor;
+use App\Repositories\ArtistRepository;
 use App\Repositories\UserRepository;
 use App\Services\CryptoService;
 use App\Services\I18nService;
@@ -54,6 +56,12 @@ final class App
         $container->add(UserRepository::class)
             ->addArgument(ConnectionFactory::class)
             ->addArgument(LoggerInterface::class);
+            
+        $container->add(ArtistRepository::class, function () use ($container): ArtistRepository {
+            /** @var ConnectionFactory $factory */
+            $factory = $container->get(ConnectionFactory::class);
+            return new ArtistRepository($factory->pdo());
+        });
 
         $container->add(CryptoService::class)
             ->addArgument(LoggerInterface::class);
@@ -73,6 +81,7 @@ final class App
         $container->add(LastFmService::class)
             ->addArgument(GuzzleClient::class)
             ->addArgument(LoggerInterface::class)
+            ->addArgument(ArtistRepository::class)
             ->addArgument('basePath');
 
         $container->add(MontageService::class)
@@ -138,10 +147,16 @@ final class App
 
         $container->add(AdminController::class)
             ->addArgument(ConnectionFactory::class)
-            ->addArgument(Engine::class);
+            ->addArgument(Engine::class)
+            ->addArgument(ArtistRepository::class);
 
         $container->add(MontageController::class)
             ->addArgument('dataPath');
+            
+        $container->add(ArtistController::class)
+            ->addArgument(ArtistRepository::class)
+            ->addArgument(LastFmService::class)
+            ->addArgument(Engine::class);
 
         return $container;
     }
@@ -171,6 +186,12 @@ final class App
         $router->map('POST', '/admin/login', [AdminController::class, 'login']);
         $router->map('POST', '/admin/logout', [AdminController::class, 'logout']);
         $router->map('GET', '/admin/user/{id:\d+}', [AdminController::class, 'showUser']);
+        
+        $router->map('GET', '/admin/artists', [ArtistController::class, 'index']);
+        $router->map('GET', '/admin/artists/statistics', [ArtistController::class, 'statistics']);
+        $router->map('GET', '/admin/artists/{id:\d+}', [ArtistController::class, 'show']);
+        $router->map('GET', '/admin/artists/{id:\d+}/image', [ArtistController::class, 'getImage']);
+        $router->map('POST', '/admin/artists/{id:\d+}/regenerate-image', [ArtistController::class, 'regenerateImage']);
 
         $router->setStrategy((new \League\Route\Strategy\ApplicationStrategy())->setContainer($container));
 

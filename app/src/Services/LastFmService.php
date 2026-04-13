@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\ArtistRepository;
 use GuzzleHttp\Client as Guzzle;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -11,12 +12,19 @@ use Throwable;
 final class LastFmService
 {
     private string $cacheDir;
+    private Guzzle $http;
+    private LoggerInterface $logger;
+    private ArtistRepository $artistRepository;
 
     public function __construct(
-        private readonly Guzzle $http,
-        private readonly LoggerInterface $logger,
-        string $basePath,
+        Guzzle $http,
+        LoggerInterface $logger,
+        ArtistRepository $artistRepository,
+        string $basePath
     ) {
+        $this->http = $http;
+        $this->logger = $logger;
+        $this->artistRepository = $artistRepository;
         $this->cacheDir = $basePath . '/data/cache/artists';
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0775, true);
@@ -32,7 +40,7 @@ final class LastFmService
     /**
      * @return list<array{name:string,playcount:int,imageUrl:?string,mbid:?string}>
      */
-    public function getWeeklyArtistChart(string $username, int $limit = 5): array
+    public function getWeeklyArtistChart(string $username, int $limit = 5, ?int $userId = null): array
     {
         $data = $this->call('user.getweeklyartistchart', ['user' => $username]);
         $artists = $data['weeklyartistchart']['artist'] ?? [];
@@ -45,6 +53,7 @@ final class LastFmService
         }
 
         $out = [];
+        $position = 1;
         foreach ($artists as $a) {
             if (!is_array($a)) {
                 continue;
@@ -61,12 +70,40 @@ final class LastFmService
                 $imageUrl = $this->pickLargestImageUrl($a['image']);
             }
 
+            $artistUrl = 'https://www.last.fm/music/' . rawurlencode($name);
+            $imageHash = md5(strtolower(trim($name)));
+            
+            $artist = $this->artistRepository->findByName($name);
+            
+            if (!$artist) {
+                $artistId = $this->artistRepository->create([
+                    'name' => $name,
+                    'lastfm_url' => $artistUrl,
+                    'musicbrainz_id' => $mbid !== '' ? $mbid : null,
+                    'image_hash' => $imageHash,
+                ]);
+            } else {
+                $artistId = (int) $artist['id'];
+                
+                if ($mbid !== '' && empty($artist['musicbrainz_id'])) {
+                    $this->artistRepository->update($artistId, [
+                        'musicbrainz_id' => $mbid
+                    ]);
+                }
+            }
+            
+            if ($userId !== null) {
+                $this->artistRepository->recordStats($artistId, $userId, $position, $playcount);
+            }
+
             $out[] = [
                 'name' => $name,
                 'playcount' => $playcount,
                 'imageUrl' => $imageUrl,
                 'mbid' => $mbid !== '' ? $mbid : null,
             ];
+            
+            $position++;
             if (count($out) >= $limit) {
                 break;
             }
@@ -103,8 +140,24 @@ final class LastFmService
     {
         $hash = md5(strtolower(trim($artistName)));
         $path = $this->cacheDir . '/' . $hash . '.jpg';
+        
         if (is_file($path)) {
             return $path;
+        }
+        
+        // Find artist in database
+        $artist = $this->artistRepository->findByName($artistName);
+        
+        // If artist doesn't exist in database, create it
+        if (!$artist) {
+            $artistUrl = 'https://www.last.fm/music/' . rawurlencode($artistName);
+            
+            $this->artistRepository->create([
+                'name' => $artistName,
+                'lastfm_url' => $artistUrl,
+                'musicbrainz_id' => $mbid,
+                'image_hash' => $hash,
+            ]);
         }
 
         // 1. Try Last.fm directly
@@ -127,6 +180,52 @@ final class LastFmService
         }
 
         return '';
+    }
+
+    /**
+     * Regenerate artist image from a specific source
+     * 
+     * @param int $artistId The artist ID
+     * @param string $source The source to use ('lastfm', 'archive', 'musicbrainz')
+     * @return bool Whether the regeneration was successful
+     */
+    public function regenerateArtistImage(int $artistId, string $source = 'lastfm'): bool
+    {
+        $artist = $this->artistRepository->findById($artistId);
+        if (!$artist) {
+            return false;
+        }
+        
+        $artistName = $artist['name'];
+        $mbid = $artist['musicbrainz_id'];
+        $hash = $artist['image_hash'];
+        $path = $this->cacheDir . '/' . $hash . '.jpg';
+        
+        if (is_file($path)) {
+            unlink($path);
+        }
+        
+        $result = false;
+        
+        switch ($source) {
+            case 'lastfm':
+                $result = $this->fetchAndSaveFromLastFm($artistName, $path) !== '';
+                break;
+                
+            case 'archive':
+                $result = $this->fetchAndSaveFromArchiveOrg($artistName, $path) !== '';
+                break;
+                
+            case 'musicbrainz':
+                $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
+                if ($imageData !== null) {
+                    file_put_contents($path, $imageData);
+                    $result = true;
+                }
+                break;
+        }
+        
+        return $result;
     }
 
     /**

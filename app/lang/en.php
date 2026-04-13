@@ -131,5 +131,58 @@ return [
     'admin.field.created_at' => 'Created At',
     'admin.field.updated_at' => 'Updated At',
     'admin.field.no_value' => '(empty)',
-];
+    // Artist management
+    'admin.artists.title' => 'Artists',
+    'admin.artists.statistics_title' => 'Statistics',
+    'admin.artists.manage' => 'Manage Artists',
+    'admin.artists.search_placeholder' => 'Search by artist name...',
+    'admin.artists.no_artists' => 'No artists found',
+    'admin.artists.no_stats' => 'No statistics available',
+    'admin.artists.view_details' => 'View Artist Details',
+    'admin.artists.regenerate_image' => 'Regenerate Image',
+    'admin.artists.regenerate_image_title' => 'Regenerate Artist Image',
+    'admin.artists.regenerate_image_text' => 'Choose a source to regenerate the artist image from:',
+    'admin.artists.image_source' => 'Image Source',
+    'admin.artists.regenerate_button' => 'Regenerate',
+    'admin.artists.regenerate_success' => 'Image regenerated successfully!',
+    'admin.artists.regenerate_error' => 'Failed to regenerate image. Please try another source.',
+    'admin.artists.view_statistics' => 'View Statistics',
+    'admin.artists.recent_stats' => 'Recent Appearances',
+    'admin.artists.lastfm_url' => 'Last.fm URL',
+    'admin.artists.musicbrainz_id' => 'MusicBrainz ID',
+    'admin.artists.image_hash' => 'Image Hash',
+    'admin.back_to_artists' => 'Back to Artists',
+    'admin.back_to_dashboard' => 'Back to Dashboard',
+    'admin.processing' => 'Processing...',
+    'admin.created' => 'Created',
+    'admin.updated' => 'Updated',
 
+    // Artist table headers
+    'admin.artists.table.image' => 'Image',
+    'admin.artists.table.name' => 'Name',
+    'admin.artists.table.lastfm' => 'Last.fm',
+    'admin.artists.table.musicbrainz' => 'MusicBrainz',
+
+    // Artist statistics
+    'admin.artists.stats.date' => 'Date',
+    'admin.artists.stats.user' => 'User',
+    'admin.artists.stats.position' => 'Position',
+    'admin.artists.stats.plays' => 'Plays',
+    'admin.artists.stats.appearances' => 'Appearances',
+    'admin.artists.stats.avg_position' => 'Avg. Position',
+    'admin.artists.stats.total_plays' => 'Total Plays',
+
+    // Image sources
+    'admin.artists.source.lastfm' => 'Last.fm',
+    'admin.artists.source.archive' => 'Archive.org',
+    'admin.artists.source.musicbrainz' => 'MusicBrainz',
+
+    // Filters
+    'admin.filter.from_date' => 'From Date',
+    'admin.filter.to_date' => 'To Date',
+
+    // Pagination
+    'admin.pagination.navigation' => 'Page navigation',
+    'admin.pagination.previous' => 'Previous',
+    'admin.pagination.next' => 'Next',
+];
