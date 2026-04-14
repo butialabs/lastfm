@@ -80,35 +80,54 @@
         </div>
     </div>
 
-    <?php if (!empty($stats) && $totalPages > 1): ?>
-        <div class="d-flex justify-content-between align-items-center mt-4">
-            <p class="text-muted mb-0">
-                <?= sprintf(
-                    htmlspecialchars(__('admin.pagination.page_of'), ENT_QUOTES),
-                    $currentPage,
-                    $totalPages,
-                    $totalStats
-                ) ?>
-            </p>
-            <nav aria-label="<?= htmlspecialchars(__('admin.pagination.navigation'), ENT_QUOTES) ?>">
-                <ul class="pagination mb-0">
-                    <?php if ($currentPage > 1): ?>
-                        <li class="page-item">
-                            <a class="page-link" href="?page=<?= $currentPage - 1 ?>&limit=<?= $filters['limit'] ?>&search=<?= urlencode($filters['search'] ?? '') ?>&from_date=<?= urlencode($filters['from_date'] ?? '') ?>&to_date=<?= urlencode($filters['to_date'] ?? '') ?>">
-                                &laquo; <?= htmlspecialchars(__('admin.pagination.previous'), ENT_QUOTES) ?>
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    
-                    <?php if ($currentPage < $totalPages): ?>
-                        <li class="page-item">
-                            <a class="page-link" href="?page=<?= $currentPage + 1 ?>&limit=<?= $filters['limit'] ?>&search=<?= urlencode($filters['search'] ?? '') ?>&from_date=<?= urlencode($filters['from_date'] ?? '') ?>&to_date=<?= urlencode($filters['to_date'] ?? '') ?>">
-                                <?= htmlspecialchars(__('admin.pagination.next'), ENT_QUOTES) ?> &raquo;
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                </ul>
-            </nav>
-        </div>
+    <?php if ($totalPages > 1): ?>
+        <nav aria-label="Statistics pagination" class="pb-2 pt-3">
+            <ul class="pagination justify-content-center m-0">
+                <?php
+                $buildUrl = function ($page) use ($filters) {
+                    $params = $filters;
+                    $params['page'] = $page;
+                    return '/admin/artists/statistics?' . http_build_query($params);
+                };
+                ?>
+
+                <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $buildUrl(1) ?>" aria-label="First">
+                        <span aria-hidden="true">&laquo;&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $buildUrl($currentPage - 1) ?>" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+
+                <?php
+                $start = max(1, $currentPage - 2);
+                $end = min($totalPages, $currentPage + 2);
+                for ($i = $start; $i <= $end; $i++):
+                    ?>
+                    <li class="page-item <?= $i === $currentPage ? 'active' : '' ?>">
+                        <a class="page-link" href="<?= $buildUrl($i) ?>">
+                            <?= $i ?>
+                        </a>
+                    </li>
+                <?php endfor; ?>
+
+                <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $buildUrl($currentPage + 1) ?>" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $buildUrl($totalPages) ?>" aria-label="Last">
+                        <span aria-hidden="true">&raquo;&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <p class="text-center text-muted small pb-2 m-0">
+            <?= htmlspecialchars(__('admin.pagination.page_of', [$currentPage, $totalPages, $totalStats]), ENT_QUOTES) ?>
+        </p>
     <?php endif; ?>
 </div>

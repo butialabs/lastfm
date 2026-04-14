@@ -41,6 +41,7 @@ final class ArtistController
         
         $filters = [
             'search' => trim((string) ($query['search'] ?? '')),
+            'no_image' => trim((string) ($query['no_image'] ?? '')),
             'limit' => (int) ($query['limit'] ?? 25),
             'page' => max(1, (int) ($query['page'] ?? 1)),
         ];
@@ -52,12 +53,18 @@ final class ArtistController
         $offset = ($filters['page'] - 1) * $filters['limit'];
         
         $artists = $this->artistRepository->findAll(
-            ['search' => $filters['search']], 
-            $filters['limit'], 
+            [
+                'search' => $filters['search'],
+                'no_image' => $filters['no_image']
+            ],
+            $filters['limit'],
             $offset
         );
         
-        $totalArtists = $this->artistRepository->countAll(['search' => $filters['search']]);
+        $totalArtists = $this->artistRepository->countAll([
+            'search' => $filters['search'],
+            'no_image' => $filters['no_image']
+        ]);
         $totalPages = (int) ceil($totalArtists / $filters['limit']);
 
         $html = $this->views->render('admin/artists/index', [
@@ -99,37 +106,6 @@ final class ArtistController
         ]);
 
         return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);
-    }
-
-    /**
-     * Regenerate artist image
-     */
-    public function regenerateImage(ServerRequestInterface $request, array $args): ResponseInterface
-    {
-        session_start_safe();
-        if (!$this->isAuthenticated()) {
-            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
-        }
-
-        $artistId = (int) ($args['id'] ?? 0);
-        if ($artistId <= 0) {
-            return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid artist ID']));
-        }
-
-        $body = (array) ($request->getParsedBody() ?? []);
-        $source = (string) ($body['source'] ?? 'lastfm');
-        
-        if (!in_array($source, ['lastfm', 'archive', 'musicbrainz'], true)) {
-            $source = 'lastfm';
-        }
-
-        $success = $this->lastFmService->regenerateArtistImage($artistId, $source);
-
-        if ($success) {
-            return new Response(200, ['Content-Type' => 'application/json'], json_encode(['success' => true]));
-        } else {
-            return new Response(500, ['Content-Type' => 'application/json'], json_encode(['error' => 'Failed to regenerate image']));
-        }
     }
 
     /**
@@ -212,6 +188,55 @@ final class ArtistController
             'Content-Length' => strlen($imageData),
             'Cache-Control' => 'public, max-age=86400',
         ], $imageData);
+    }
+
+    /**
+     * Save artist image from URL
+     */
+    public function saveImage(ServerRequestInterface $request, array $args): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $artistId = (int) ($args['id'] ?? 0);
+        if ($artistId <= 0) {
+            return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid artist ID']));
+        }
+
+        $artist = $this->artistRepository->findById($artistId);
+        if (!$artist) {
+            return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'Artist not found']));
+        }
+
+        $body = $request->getParsedBody();
+        
+        if (empty($body) && $request->getHeaderLine('Content-Type') === 'application/json') {
+            $body = json_decode((string) $request->getBody(), true) ?? [];
+        }
+        
+        $imageUrl = trim((string) ($body['imageUrl'] ?? ''));
+        if (empty($imageUrl)) {
+            return new Response(400, ['Content-Type' => 'application/json'], json_encode([
+                'success' => false,
+                'message' => 'Image URL is required'
+            ]));
+        }
+
+        $success = $this->lastFmService->downloadArtistImageFromUrl($artistId, $imageUrl);
+        
+        if ($success) {
+            return new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'success' => true,
+                'message' => 'Image saved successfully'
+            ]));
+        }
+
+        return new Response(500, ['Content-Type' => 'application/json'], json_encode([
+            'success' => false,
+            'message' => 'Failed to download image from URL'
+        ]));
     }
 
     private function isAuthenticated(): bool

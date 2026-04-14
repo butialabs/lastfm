@@ -136,6 +136,10 @@ final class ArtistRepository
             $params[':search'] = '%' . $filters['search'] . '%';
         }
         
+        if (isset($filters['no_image']) && $filters['no_image'] === '1') {
+            $where[] = '(image_hash IS NULL OR image_hash = "")';
+        }
+        
         $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         
         $sql = "SELECT * FROM artists $whereClause ORDER BY name ASC LIMIT :limit OFFSET :offset";
@@ -166,6 +170,10 @@ final class ArtistRepository
         if (!empty($filters['search'])) {
             $where[] = 'name LIKE :search';
             $params[':search'] = '%' . $filters['search'] . '%';
+        }
+        
+        if (isset($filters['no_image']) && $filters['no_image'] === '1') {
+            $where[] = '(image_hash IS NULL OR image_hash = "")';
         }
         
         $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';

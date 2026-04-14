@@ -191,6 +191,7 @@ final class App
         $router->map('GET', '/admin/artists/statistics', [ArtistController::class, 'statistics']);
         $router->map('GET', '/admin/artists/{id:\d+}', [ArtistController::class, 'show']);
         $router->map('GET', '/admin/artists/{id:\d+}/image', [ArtistController::class, 'getImage']);
+        $router->map('POST', '/admin/artists/{id:\d+}/image', [ArtistController::class, 'saveImage']);
         $router->map('POST', '/admin/artists/{id:\d+}/regenerate-image', [ArtistController::class, 'regenerateImage']);
 
         $router->setStrategy((new \League\Route\Strategy\ApplicationStrategy())->setContainer($container));

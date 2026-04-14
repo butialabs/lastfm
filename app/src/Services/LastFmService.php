@@ -71,7 +71,6 @@ final class LastFmService
             }
 
             $artistUrl = 'https://www.last.fm/music/' . rawurlencode($name);
-            $imageHash = md5(strtolower(trim($name)));
             
             $artist = $this->artistRepository->findByName($name);
             
@@ -80,7 +79,7 @@ final class LastFmService
                     'name' => $name,
                     'lastfm_url' => $artistUrl,
                     'musicbrainz_id' => $mbid !== '' ? $mbid : null,
-                    'image_hash' => $imageHash,
+                    'image_hash' => null,
                 ]);
             } else {
                 $artistId = (int) $artist['id'];
@@ -138,37 +137,61 @@ final class LastFmService
 
     public function getArtistImagePath(string $artistName, ?string $imageUrl = null, ?string $mbid = null): string
     {
-        $hash = md5(strtolower(trim($artistName)));
-        $path = $this->cacheDir . '/' . $hash . '.jpg';
-        
-        if (is_file($path)) {
-            return $path;
-        }
-        
-        // Find artist in database
         $artist = $this->artistRepository->findByName($artistName);
         
-        // If artist doesn't exist in database, create it
+        if ($artist && !empty($artist['image_hash'])) {
+            $hash = $artist['image_hash'];
+            $path = $this->cacheDir . '/' . $hash . '.jpg';
+            
+            if (is_file($path)) {
+                return $path;
+            }
+        } else {
+            $hash = md5(strtolower(trim($artistName)));
+            $path = $this->cacheDir . '/' . $hash . '.jpg';
+            
+            if (is_file($path)) {
+                if ($artist) {
+                    $this->artistRepository->update((int)$artist['id'], [
+                        'image_hash' => $hash
+                    ]);
+                }
+                return $path;
+            }
+        }
+        
         if (!$artist) {
             $artistUrl = 'https://www.last.fm/music/' . rawurlencode($artistName);
             
-            $this->artistRepository->create([
+            $artistId = $this->artistRepository->create([
                 'name' => $artistName,
                 'lastfm_url' => $artistUrl,
                 'musicbrainz_id' => $mbid,
-                'image_hash' => $hash,
+                'image_hash' => null,
             ]);
+            
+            $artist = ['id' => $artistId];
         }
 
         // 1. Try Last.fm directly
         $result = $this->fetchAndSaveFromLastFm($artistName, $path);
         if ($result !== '') {
+            if (empty($artist['image_hash'])) {
+                $this->artistRepository->update((int)$artist['id'], [
+                    'image_hash' => $hash
+                ]);
+            }
             return $result;
         }
 
         // 2. Try Archive.org
         $result = $this->fetchAndSaveFromArchiveOrg($artistName, $path);
         if ($result !== '') {
+            if (empty($artist['image_hash'])) {
+                $this->artistRepository->update((int)$artist['id'], [
+                    'image_hash' => $hash
+                ]);
+            }
             return $result;
         }
 
@@ -176,6 +199,12 @@ final class LastFmService
         $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
         if ($imageData !== null) {
             file_put_contents($path, $imageData);
+            
+            if (empty($artist['image_hash'])) {
+                $this->artistRepository->update((int)$artist['id'], [
+                    'image_hash' => $hash
+                ]);
+            }
             return $path;
         }
 
@@ -183,13 +212,13 @@ final class LastFmService
     }
 
     /**
-     * Regenerate artist image from a specific source
-     * 
+     * Regenerate artist image from a URL
+     *
      * @param int $artistId The artist ID
-     * @param string $source The source to use ('lastfm', 'archive', 'musicbrainz')
+     * @param string $imageUrl The URL of the image to download
      * @return bool Whether the regeneration was successful
      */
-    public function regenerateArtistImage(int $artistId, string $source = 'lastfm'): bool
+    public function downloadArtistImageFromUrl(int $artistId, string $imageUrl): bool
     {
         $artist = $this->artistRepository->findById($artistId);
         if (!$artist) {
@@ -197,35 +226,48 @@ final class LastFmService
         }
         
         $artistName = $artist['name'];
-        $mbid = $artist['musicbrainz_id'];
-        $hash = $artist['image_hash'];
+        $hash = $artist['image_hash'] ?? md5(strtolower(trim($artistName)));
         $path = $this->cacheDir . '/' . $hash . '.jpg';
         
         if (is_file($path)) {
             unlink($path);
         }
         
-        $result = false;
-        
-        switch ($source) {
-            case 'lastfm':
-                $result = $this->fetchAndSaveFromLastFm($artistName, $path) !== '';
-                break;
-                
-            case 'archive':
-                $result = $this->fetchAndSaveFromArchiveOrg($artistName, $path) !== '';
-                break;
-                
-            case 'musicbrainz':
-                $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
-                if ($imageData !== null) {
-                    file_put_contents($path, $imageData);
-                    $result = true;
+        try {
+            $res = $this->http->get($imageUrl, [
+                'headers' => ['Accept' => 'image/*'],
+                'timeout' => 15,
+                'connect_timeout' => 5,
+            ]);
+            
+            $code = $res->getStatusCode();
+            if ($code >= 200 && $code < 300) {
+                $bin = (string) $res->getBody();
+                if ($bin !== '') {
+                    file_put_contents($path, $bin);
+                    
+                    if (empty($artist['image_hash'])) {
+                        $this->artistRepository->update($artistId, [
+                            'image_hash' => $hash
+                        ]);
+                    }
+                    
+                    $this->logger->info('Downloaded image from URL', [
+                        'artist' => $artistName,
+                        'url' => $imageUrl
+                    ]);
+                    return true;
                 }
-                break;
+            }
+        } catch (Throwable $e) {
+            $this->logger->warning('Image URL download failed', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
+                'error' => $e->getMessage()
+            ]);
         }
         
-        return $result;
+        return false;
     }
 
     /**
