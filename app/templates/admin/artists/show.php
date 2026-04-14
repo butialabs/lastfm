@@ -57,7 +57,7 @@
             <div class="card-header">
                 <h5 class="card-title mb-0"><?= htmlspecialchars(__('admin.artists.recent_stats'), ENT_QUOTES) ?></h5>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body overflow-auto p-0">
                 <table class="table table-striped table-hover mb-0">
                     <thead>
                         <tr>
