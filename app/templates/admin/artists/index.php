@@ -1,5 +1,22 @@
 <?php $this->layout('admin/layout') ?>
 
+    <style>
+        .artist-card-image {
+            height: 126px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8f9fa;
+        }
+        
+        .artist-card-image img {
+            object-fit: contain;
+            max-width: 100%;
+            max-height: 100%;
+            transition: transform 0.3s ease;
+        }
+    </style>
 
     <div class="card mb-4">
         <div class="card-body">
@@ -32,58 +49,30 @@
     </div>
 
     <div class="card">
-        <div class="card-body overflow-auto p-0">
-            <table class="table table-striped table-hover mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th><?= htmlspecialchars(__('admin.artists.table.image'), ENT_QUOTES) ?></th>
-                        <th><?= htmlspecialchars(__('admin.artists.table.name'), ENT_QUOTES) ?></th>
-                        <th><?= htmlspecialchars(__('admin.artists.table.lastfm'), ENT_QUOTES) ?></th>
-                        <th><?= htmlspecialchars(__('admin.artists.table.musicbrainz'), ENT_QUOTES) ?></th>
-                        <th><?= htmlspecialchars(__('admin.table.dates'), ENT_QUOTES) ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($artists)): ?>
-                        <tr>
-                            <td colspan="7" class="text-center text-muted py-4"><?= htmlspecialchars(__('admin.artists.no_artists'), ENT_QUOTES) ?></td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($artists as $artist): ?>
-                            <tr>
-                                <td>
-                                    <div class="artist-image">
-                                        <a href="/admin/artists/<?= (int) $artist['id'] ?>/image" target="_blank"><img src="/admin/artists/<?= (int) $artist['id'] ?>/image" class="img-fluid rounded" width="50"></a>
-                                    </div>
-                                </td>
-                                <td>
-                                    <a href="/admin/artists/<?= (int) $artist['id'] ?>"><?= htmlspecialchars($artist['name'], ENT_QUOTES) ?></a> (<?= (int) $artist['id'] ?>)
-                                </td>
-                                <td>
-                                    <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($artist['lastfm_url'], ENT_QUOTES) ?>" target="_blank" rel="noopener">
-                                        <i class="bi bi-box-arrow-up-right"></i>
-                                    </a>
-                                </td>
-                                <td>
-                                    <?php if (!empty($artist['musicbrainz_id'])): ?>
-                                        <a class="btn btn-sm btn-outline-secondary" href="https://musicbrainz.org/artist/<?= htmlspecialchars($artist['musicbrainz_id'], ENT_QUOTES) ?>" target="_blank" rel="noopener">
-                                            <i class="bi bi-box-arrow-up-right"></i>
+        <div class="card-body">
+            <?php if (empty($artists)): ?>
+                <div class="text-center text-muted py-4"><?= htmlspecialchars(__('admin.artists.no_artists'), ENT_QUOTES) ?></div>
+            <?php else: ?>
+                <div class="row row-cols-2 row-cols-md-6 g-4">
+                    <?php foreach ($artists as $artist): ?>
+                        <div class="col">
+                            <div class="card h-100">
+                                <a href="/admin/artists/<?= (int) $artist['id'] ?>/image" target="_blank" class="card-img-top artist-card-image">
+                                    <img src="/admin/artists/<?= (int) $artist['id'] ?>/image" class="img-fluid" alt="<?= htmlspecialchars($artist['name'], ENT_QUOTES) ?>">
+                                </a>
+                                <div class="card-body">
+                                    <h5 class="card-title fs-6 fw-normal mb-0">
+                                        <a href="/admin/artists/<?= (int) $artist['id'] ?>" class="text-decoration-none">
+                                            <?= htmlspecialchars($artist['name'], ENT_QUOTES) ?>
+                                            <span class="text-muted fs-6">(<?= (int) $artist['id'] ?>)</span>
                                         </a>
-                                    <?php else: ?>
-                                        <span class="text-muted">-</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <small class="text-muted">
-                                        <?= htmlspecialchars(__('admin.created'), ENT_QUOTES) ?>: <?= htmlspecialchars($artist['created_at'], ENT_QUOTES) ?><br>
-                                        <?= htmlspecialchars(__('admin.updated'), ENT_QUOTES) ?>: <?= htmlspecialchars($artist['updated_at'], ENT_QUOTES) ?>
-                                    </small>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+                                    </h5>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
