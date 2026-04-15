@@ -36,10 +36,28 @@
             <table class="table table-striped table-hover mb-0">
                 <thead class="table-dark">
                     <tr>
-                        <th><?= htmlspecialchars(__('admin.artists.table.name'), ENT_QUOTES) ?></th>
-                        <th class="text-center"><?= htmlspecialchars(__('admin.artists.stats.appearances'), ENT_QUOTES) ?></th>
-                        <th class="text-center"><?= htmlspecialchars(__('admin.artists.stats.avg_position'), ENT_QUOTES) ?></th>
-                        <th class="text-center"><?= htmlspecialchars(__('admin.artists.stats.total_plays'), ENT_QUOTES) ?></th>
+                        <?php
+                        $sortLink = function($column, $label) use ($filters) {
+                            $currentSort = $filters['sort'] ?? 'appearance_count';
+                            $currentOrder = $filters['order'] ?? 'desc';
+                            
+                            $newOrder = ($currentSort === $column && $currentOrder === 'desc') ? 'asc' : 'desc';
+                            $sortParams = array_merge($filters, ['sort' => $column, 'order' => $newOrder, 'page' => 1]);
+                            $url = '/admin/artists/statistics?' . http_build_query($sortParams);
+                            
+                            $sortIcon = '';
+                            if ($currentSort === $column) {
+                                $sortIcon = $currentOrder === 'asc' ? ' ↑' : ' ↓';
+                            }
+                            
+                            return '<a href="' . $url . '" class="text-white text-decoration-none">' .
+                                   htmlspecialchars($label, ENT_QUOTES) . $sortIcon . '</a>';
+                        };
+                        ?>
+                        <th><?= $sortLink('name', __('admin.artists.table.name')) ?></th>
+                        <th class="text-center"><?= $sortLink('appearance_count', __('admin.artists.stats.appearances')) ?></th>
+                        <th class="text-center"><?= $sortLink('average_position', __('admin.artists.stats.avg_position')) ?></th>
+                        <th class="text-center"><?= $sortLink('total_plays', __('admin.artists.stats.total_plays')) ?></th>
                     </tr>
                 </thead>
                 <tbody>

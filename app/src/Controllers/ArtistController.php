@@ -126,6 +126,8 @@ final class ArtistController
             'to_date' => trim((string) ($query['to_date'] ?? '')),
             'limit' => (int) ($query['limit'] ?? 25),
             'page' => max(1, (int) ($query['page'] ?? 1)),
+            'sort' => trim((string) ($query['sort'] ?? 'appearance_count')),
+            'order' => trim((string) ($query['order'] ?? 'desc')),
         ];
 
         if (!in_array($filters['limit'], [25, 50, 100], true)) {

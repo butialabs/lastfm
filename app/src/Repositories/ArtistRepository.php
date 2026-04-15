@@ -277,23 +277,33 @@ final class ArtistRepository
         
         $whereClause = implode(' AND ', $where);
         
+        $validSortColumns = [
+            'name' => 'a.name',
+            'appearance_count' => 'appearance_count',
+            'average_position' => 'average_position',
+            'total_plays' => 'total_plays'
+        ];
+        
+        $sortColumn = $validSortColumns[$filters['sort'] ?? 'appearance_count'] ?? 'appearance_count';
+        $sortOrder = strtoupper($filters['order'] ?? 'desc') === 'ASC' ? 'ASC' : 'DESC';
+        
         $sql = "
-            SELECT 
+            SELECT
                 a.id,
                 a.name,
                 COUNT(s.id) as appearance_count,
                 AVG(s.position) as average_position,
                 SUM(s.play_count) as total_plays
-            FROM 
+            FROM
                 artists a
-            JOIN 
+            JOIN
                 artist_stats s ON a.id = s.artist_id
-            WHERE 
+            WHERE
                 $whereClause
-            GROUP BY 
+            GROUP BY
                 a.id, a.name
-            ORDER BY 
-                appearance_count DESC, average_position ASC
+            ORDER BY
+                $sortColumn $sortOrder
             LIMIT :limit OFFSET :offset
         ";
         
