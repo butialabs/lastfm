@@ -176,9 +176,9 @@ final class ArtistController
             return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'Artist not found']));
         }
 
-        $imagePath = $this->lastFmService->getArtistImagePath($artist['name'], null, $artist['musicbrainz_id']);
-        
-        if (empty($imagePath) || !file_exists($imagePath)) {
+        $imagePath = $this->lastFmService->getCachedImagePath($artist);
+
+        if ($imagePath === null) {
             return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'Image not found']));
         }
 
@@ -238,6 +238,41 @@ final class ArtistController
         return new Response(500, ['Content-Type' => 'application/json'], json_encode([
             'success' => false,
             'message' => 'Failed to download image from URL'
+        ]));
+    }
+
+    /**
+     * Force re-download of artist image from the default sources
+     */
+    public function regenerateImage(ServerRequestInterface $request, array $args): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $artistId = (int) ($args['id'] ?? 0);
+        if ($artistId <= 0) {
+            return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid artist ID']));
+        }
+
+        $artist = $this->artistRepository->findById($artistId);
+        if (!$artist) {
+            return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'Artist not found']));
+        }
+
+        $success = $this->lastFmService->regenerateArtistImage($artistId);
+
+        if ($success) {
+            return new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'success' => true,
+                'message' => 'Image regenerated successfully'
+            ]));
+        }
+
+        return new Response(500, ['Content-Type' => 'application/json'], json_encode([
+            'success' => false,
+            'message' => 'Failed to regenerate image from default sources'
         ]));
     }
 

@@ -135,6 +135,71 @@ final class LastFmService
         return $total;
     }
 
+    /**
+     * Return the local cached image path for an artist without triggering any download.
+     */
+    public function getCachedImagePath(array $artist): ?string
+    {
+        $hash = !empty($artist['image_hash'])
+            ? $artist['image_hash']
+            : md5(strtolower(trim((string) $artist['name'])));
+
+        $path = $this->cacheDir . '/' . $hash . '.jpg';
+
+        if (!is_file($path)) {
+            return null;
+        }
+
+        if (empty($artist['image_hash']) && !empty($artist['id'])) {
+            $this->artistRepository->update((int) $artist['id'], ['image_hash' => $hash]);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Force a re-download of the artist image from the default sources
+     * (Last.fm → Archive.org → MusicBrainz), overwriting any cached copy.
+     */
+    public function regenerateArtistImage(int $artistId): bool
+    {
+        $artist = $this->artistRepository->findById($artistId);
+        if (!$artist) {
+            return false;
+        }
+
+        $hash = !empty($artist['image_hash'])
+            ? $artist['image_hash']
+            : md5(strtolower(trim((string) $artist['name'])));
+        $path = $this->cacheDir . '/' . $hash . '.jpg';
+
+        if (is_file($path)) {
+            unlink($path);
+        }
+
+        $result = $this->fetchAndSaveFromLastFm($artist['name'], $path);
+        if ($result === '') {
+            $result = $this->fetchAndSaveFromArchiveOrg($artist['name'], $path);
+        }
+        if ($result === '') {
+            $imageData = $this->fetchFromMusicBrainz($artist['name'], $artist['musicbrainz_id'] ?? null);
+            if ($imageData !== null) {
+                file_put_contents($path, $imageData);
+                $result = $path;
+            }
+        }
+
+        if ($result === '' || !is_file($path)) {
+            return false;
+        }
+
+        if (empty($artist['image_hash'])) {
+            $this->artistRepository->update($artistId, ['image_hash' => $hash]);
+        }
+
+        return true;
+    }
+
     public function getArtistImagePath(string $artistName, ?string $imageUrl = null, ?string $mbid = null): string
     {
         $artist = $this->artistRepository->findByName($artistName);

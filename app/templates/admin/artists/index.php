@@ -57,7 +57,7 @@
                     <?php foreach ($artists as $artist): ?>
                         <div class="col">
                             <div class="card h-100">
-                                <a href="/admin/artists/<?= (int) $artist['id'] ?>/image" target="_blank" class="card-img-top artist-card-image">
+                                <a href="/admin/artists/<?= (int) $artist['id'] ?>" target="_blank" class="card-img-top artist-card-image">
                                     <img src="/admin/artists/<?= (int) $artist['id'] ?>/image" class="img-fluid" alt="<?= htmlspecialchars($artist['name'], ENT_QUOTES) ?>">
                                 </a>
                                 <div class="card-body">

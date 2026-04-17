@@ -11,9 +11,14 @@
                     </div>
                     <code class="d-block p-2 text-center"><?= htmlspecialchars($artist['image_hash'], ENT_QUOTES) ?></code>
                 <?php } ?>
-                <button type="button" class="btn btn-primary fetch-image" data-artist-id="<?= (int) $artist['id'] ?>">
-                    <i class="bi bi-image"></i> <?= htmlspecialchars(__('admin.artists.change_image'), ENT_QUOTES) ?>
-                </button>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-primary fetch-image" data-artist-id="<?= (int) $artist['id'] ?>">
+                        <i class="bi bi-image"></i> <?= htmlspecialchars(__('admin.artists.change_image'), ENT_QUOTES) ?>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary regenerate-image" data-artist-id="<?= (int) $artist['id'] ?>">
+                        <i class="bi bi-arrow-clockwise"></i> <?= htmlspecialchars(__('admin.artists.force_download'), ENT_QUOTES) ?>
+                    </button>
+                </div>
 
                 <h5 class="card-title mt-2"><?= htmlspecialchars($artist['name'], ENT_QUOTES) ?></h5>
 
@@ -151,7 +156,40 @@
                 modal.show();
             });
         });
-        
+
+        const regenerateButtons = document.querySelectorAll('.regenerate-image');
+        regenerateButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const artistId = button.dataset.artistId;
+                const originalHtml = button.innerHTML;
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+                fetch(`/admin/artists/${artistId}/regenerate-image`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok && data.success) {
+                        window.location.reload();
+                    } else {
+                        alert('<?= htmlspecialchars(__('admin.artists.regenerate_error'), ENT_QUOTES) ?>: ' + (data.message || ''));
+                        button.disabled = false;
+                        button.innerHTML = originalHtml;
+                    }
+                })
+                .catch(error => {
+                    alert('<?= htmlspecialchars(__('admin.artists.regenerate_error'), ENT_QUOTES) ?>: ' + error.message);
+                    button.disabled = false;
+                    button.innerHTML = originalHtml;
+                });
+            });
+        });
+
         const fetchButton = document.getElementById('fetchButton');
         fetchButton.addEventListener('click', function() {
             const artistId = artistIdInput.value;
