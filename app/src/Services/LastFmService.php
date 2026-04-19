@@ -370,64 +370,165 @@ final class LastFmService
      */
     private function fetchArtistImageFromLastFmPage(string $artistName): ?string
     {
-        $appUrl = trim((string) ($_ENV['APP_URL'] ?? 'https://lastfm.blue'));
-        $userAgent = 'LastFM.blue/1.0 ( ' . $appUrl . ' )';
-        
         $artistSlug = rawurlencode($artistName);
         $url = 'https://www.last.fm/music/' . $artistSlug;
-        
+
         $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
-        
-        $options = [
-            'headers' => [
-                'Accept' => 'text/html',
-                'User-Agent' => $userAgent,
-            ],
-            'timeout' => 10,
-            'connect_timeout' => 5,
+
+        $referers = [
+            'https://www.google.com/',
+            'https://www.google.com/search?q=' . rawurlencode($artistName . ' last.fm'),
+            'https://www.last.fm/',
+            'https://duckduckgo.com/',
+            'https://www.bing.com/search?q=' . rawurlencode($artistName),
         ];
-        
-        try {
-            $res = $this->http->get($url, $options);
-            
-            if ($res->getStatusCode() !== 200) {
+
+        $maxAttempts = 3;
+        $lastStatus = 0;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $userAgent = $this->pickBrowserUserAgent();
+            $referer = $referers[array_rand($referers)];
+
+            $options = [
+                'headers' => [
+                    'User-Agent' => $userAgent,
+                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
+                    'Accept-Encoding' => 'gzip, deflate, br',
+                    'Cache-Control' => 'max-age=0',
+                    'Upgrade-Insecure-Requests' => '1',
+                    'Sec-Fetch-Dest' => 'document',
+                    'Sec-Fetch-Mode' => 'navigate',
+                    'Sec-Fetch-Site' => 'cross-site',
+                    'Sec-Fetch-User' => '?1',
+                    'Sec-Ch-Ua' => '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                    'Sec-Ch-Ua-Mobile' => '?0',
+                    'Sec-Ch-Ua-Platform' => '"Windows"',
+                    'Referer' => $referer,
+                    'DNT' => '1',
+                    'Connection' => 'keep-alive',
+                ],
+                'timeout' => 15,
+                'connect_timeout' => 5,
+                'allow_redirects' => [
+                    'max' => 5,
+                    'strict' => false,
+                    'referer' => true,
+                    'protocols' => ['http', 'https'],
+                    'track_redirects' => false,
+                ],
+                'decode_content' => true,
+                'http_errors' => false,
+                'verify' => true,
+            ];
+
+            try {
+                $res = $this->http->get($url, $options);
+                $status = $res->getStatusCode();
+                $lastStatus = $status;
+
+                if ($status === 200) {
+                    $html = (string) $res->getBody();
+
+                    if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
+                        $this->logger->info('Found og:image on Last.fm artist page', [
+                            'artist' => $artistName,
+                            'imageUrl' => $matches[1],
+                            'attempt' => $attempt,
+                        ]);
+                        return $matches[1];
+                    }
+
+                    if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
+                        $this->logger->info('Found og:image on Last.fm artist page (alt)', [
+                            'artist' => $artistName,
+                            'imageUrl' => $matches[1],
+                            'attempt' => $attempt,
+                        ]);
+                        return $matches[1];
+                    }
+
+                    $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
+                    return null;
+                }
+
+                if ($status === 404) {
+                    $this->logger->debug('Last.fm artist page not found', [
+                        'artist' => $artistName,
+                        'status' => $status,
+                    ]);
+                    return null;
+                }
+
+                if ($status === 403 || $status === 429 || $status >= 500 && $status < 600) {
+                    $this->logger->debug('Last.fm artist page blocked/throttled, retrying', [
+                        'artist' => $artistName,
+                        'status' => $status,
+                        'attempt' => $attempt,
+                    ]);
+                    if ($attempt < $maxAttempts) {
+                        $this->sleepWithBackoff($attempt);
+                    }
+                    continue;
+                }
+
                 $this->logger->debug('Last.fm artist page returned non-200', [
                     'artist' => $artistName,
-                    'status' => $res->getStatusCode()
+                    'status' => $status,
                 ]);
                 return null;
-            }
-            
-            $html = (string) $res->getBody();
-            
-            if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
-                $imageUrl = $matches[1];
-                $this->logger->info('Found og:image on Last.fm artist page', [
+
+            } catch (Throwable $e) {
+                $this->logger->warning('Failed to fetch Last.fm artist page', [
                     'artist' => $artistName,
-                    'imageUrl' => $imageUrl
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage(),
                 ]);
-                return $imageUrl;
+                if ($attempt < $maxAttempts) {
+                    $this->sleepWithBackoff($attempt);
+                    continue;
+                }
+                return null;
             }
-            
-            if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
-                $imageUrl = $matches[1];
-                $this->logger->info('Found og:image on Last.fm artist page (alt)', [
-                    'artist' => $artistName,
-                    'imageUrl' => $imageUrl
-                ]);
-                return $imageUrl;
-            }
-            
-            $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
-            return null;
-            
-        } catch (Throwable $e) {
-            $this->logger->warning('Failed to fetch Last.fm artist page', [
-                'artist' => $artistName,
-                'error' => $e->getMessage()
-            ]);
-            return null;
         }
+
+        $this->logger->warning('Last.fm artist page failed after retries', [
+            'artist' => $artistName,
+            'lastStatus' => $lastStatus,
+            'attempts' => $maxAttempts,
+        ]);
+        return null;
+    }
+
+    /**
+     * User-Agent from a rotating pool
+     */
+    private function pickBrowserUserAgent(): string
+    {
+        $agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.3; rv:124.0) Gecko/20100101 Firefox/124.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
+        ];
+
+        return $agents[array_rand($agents)];
+    }
+
+    /**
+     * Sleep with exponential backoff and jitter
+     */
+    private function sleepWithBackoff(int $attempt): void
+    {
+        $baseMs = 300 * (2 ** ($attempt - 1));
+        $jitterMs = random_int(100, 500);
+        $totalUs = ($baseMs + $jitterMs) * 1000;
+        usleep($totalUs);
     }
 
     /**
