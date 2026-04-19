@@ -22,22 +22,29 @@
 
                 <h5 class="card-title mt-2"><?= htmlspecialchars($artist['name'], ENT_QUOTES) ?></h5>
 
-                <div>
+                <div class="mb-2">
                     <strong
                         class="d-block"><?= htmlspecialchars(__('admin.artists.lastfm_url'), ENT_QUOTES) ?>:</strong>
-                    <a href="<?= htmlspecialchars($artist['lastfm_url'], ENT_QUOTES) ?>" target="_blank" rel="noopener"
+                    <div class="d-flex gap-1">
+                    <a href="<?= htmlspecialchars($artist['lastfm_url'], ENT_QUOTES) ?>" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener"
                         class="d-block text-truncate">
-                        <?= htmlspecialchars($artist['lastfm_url'], ENT_QUOTES) ?>
+                        <i class="bi bi-box-arrow-up-right"></i>
                     </a>
+                    <a href="<?= htmlspecialchars($artist['lastfm_url'], ENT_QUOTES) ?>/+images/" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener"
+                        class="d-block text-truncate">
+                        <i class="bi bi-image"></i>
+                    </a>
+                    </div>
+
                 </div>
 
-                <div>
+                <div class="mb-2">
                     <strong
-                        class="d-block"><?= htmlspecialchars(__('admin.artists.musicbrainz_id'), ENT_QUOTES) ?>:</strong>
+                        class="d-block"><?= htmlspecialchars(__('admin.artists.musicbrainz_url'), ENT_QUOTES) ?>:</strong>
                     <?php if (!empty($artist['musicbrainz_id'])): ?>
                         <a href="https://musicbrainz.org/artist/<?= htmlspecialchars($artist['musicbrainz_id'], ENT_QUOTES) ?>"
-                            target="_blank" rel="noopener">
-                            <?= htmlspecialchars($artist['musicbrainz_id'], ENT_QUOTES) ?>
+                            class="btn btn-outline-secondary btn-sm"  target="_blank" rel="noopener">
+                            <i class="bi bi-box-arrow-up-right"></i>
                         </a>
                     <?php else: ?>
                         <span class="text-muted"><?= htmlspecialchars(__('admin.field.no_value'), ENT_QUOTES) ?></span>

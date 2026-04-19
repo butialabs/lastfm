@@ -162,6 +162,7 @@ return [
     'admin.artists.recent_stats' => 'Recent Appearances',
     'admin.artists.lastfm_url' => 'Last.fm URL',
     'admin.artists.musicbrainz_id' => 'MusicBrainz ID',
+    'admin.artists.musicbrainz_url' => 'MusicBrainz URL',
     'admin.artists.image_hash' => 'Image Hash',
     'admin.back_to_artists' => 'Back to Artists',
     'admin.back_to_dashboard' => 'Back to Dashboard',
