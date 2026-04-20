@@ -15,6 +15,7 @@ final class LastFmService
     private Guzzle $http;
     private LoggerInterface $logger;
     private ArtistRepository $artistRepository;
+    private ?array $proxyPool = null;
 
     public function __construct(
         Guzzle $http,
@@ -375,6 +376,44 @@ final class LastFmService
 
         $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
 
+        $direct = $this->tryFetchArtistPage($url, $artistName, null, 1);
+        if ($direct['definitive']) {
+            return $direct['imageUrl'];
+        }
+
+        $proxies = $this->loadProxyPool();
+        if ($proxies === []) {
+            $this->logger->warning('Last.fm artist page failed, no proxy configured', [
+                'artist' => $artistName,
+                'lastStatus' => $direct['status'],
+            ]);
+            return null;
+        }
+
+        $proxy = $proxies[array_rand($proxies)];
+        $this->logger->debug('Falling back to proxy', [
+            'artist' => $artistName,
+            'proxiesAvailable' => count($proxies),
+        ]);
+
+        $proxied = $this->tryFetchArtistPage($url, $artistName, $proxy, 1);
+        if ($proxied['definitive']) {
+            return $proxied['imageUrl'];
+        }
+
+        $this->logger->warning('Last.fm artist page failed after direct + proxy', [
+            'artist' => $artistName,
+            'directStatus' => $direct['status'],
+            'proxyStatus' => $proxied['status'],
+        ]);
+        return null;
+    }
+
+    /**
+     * Single attempt at fetching the Last.fm artist page.
+     */
+    private function tryFetchArtistPage(string $url, string $artistName, ?string $proxy, int $attempt): array
+    {
         $referers = [
             'https://www.google.com/',
             'https://www.google.com/search?q=' . rawurlencode($artistName . ' last.fm'),
@@ -383,122 +422,242 @@ final class LastFmService
             'https://www.bing.com/search?q=' . rawurlencode($artistName),
         ];
 
-        $maxAttempts = 3;
-        $lastStatus = 0;
+        $options = [
+            'headers' => [
+                'User-Agent' => $this->pickBrowserUserAgent(),
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
+                'Accept-Encoding' => 'gzip, deflate, br',
+                'Cache-Control' => 'max-age=0',
+                'Upgrade-Insecure-Requests' => '1',
+                'Sec-Fetch-Dest' => 'document',
+                'Sec-Fetch-Mode' => 'navigate',
+                'Sec-Fetch-Site' => 'cross-site',
+                'Sec-Fetch-User' => '?1',
+                'Sec-Ch-Ua' => '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                'Sec-Ch-Ua-Mobile' => '?0',
+                'Sec-Ch-Ua-Platform' => '"Windows"',
+                'Referer' => $referers[array_rand($referers)],
+                'DNT' => '1',
+                'Connection' => 'keep-alive',
+            ],
+            'timeout' => $proxy !== null ? 25 : 15,
+            'connect_timeout' => $proxy !== null ? 10 : 5,
+            'allow_redirects' => [
+                'max' => 5,
+                'strict' => false,
+                'referer' => true,
+                'protocols' => ['http', 'https'],
+                'track_redirects' => false,
+            ],
+            'decode_content' => true,
+            'http_errors' => false,
+            'verify' => true,
+        ];
 
-        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            $userAgent = $this->pickBrowserUserAgent();
-            $referer = $referers[array_rand($referers)];
+        if ($proxy !== null) {
+            $options['proxy'] = $proxy;
+        }
 
-            $options = [
-                'headers' => [
-                    'User-Agent' => $userAgent,
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                    'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
-                    'Accept-Encoding' => 'gzip, deflate, br',
-                    'Cache-Control' => 'max-age=0',
-                    'Upgrade-Insecure-Requests' => '1',
-                    'Sec-Fetch-Dest' => 'document',
-                    'Sec-Fetch-Mode' => 'navigate',
-                    'Sec-Fetch-Site' => 'cross-site',
-                    'Sec-Fetch-User' => '?1',
-                    'Sec-Ch-Ua' => '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-                    'Sec-Ch-Ua-Mobile' => '?0',
-                    'Sec-Ch-Ua-Platform' => '"Windows"',
-                    'Referer' => $referer,
-                    'DNT' => '1',
-                    'Connection' => 'keep-alive',
-                ],
-                'timeout' => 15,
-                'connect_timeout' => 5,
-                'allow_redirects' => [
-                    'max' => 5,
-                    'strict' => false,
-                    'referer' => true,
-                    'protocols' => ['http', 'https'],
-                    'track_redirects' => false,
-                ],
-                'decode_content' => true,
-                'http_errors' => false,
-                'verify' => true,
-            ];
+        $via = $proxy !== null ? 'proxy' : 'direct';
 
-            try {
-                $res = $this->http->get($url, $options);
-                $status = $res->getStatusCode();
-                $lastStatus = $status;
+        try {
+            $res = $this->http->get($url, $options);
+            $status = $res->getStatusCode();
 
-                if ($status === 200) {
-                    $html = (string) $res->getBody();
+            if ($status === 200) {
+                $html = (string) $res->getBody();
 
-                    if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
-                        $this->logger->info('Found og:image on Last.fm artist page', [
-                            'artist' => $artistName,
-                            'imageUrl' => $matches[1],
-                            'attempt' => $attempt,
-                        ]);
-                        return $matches[1];
-                    }
-
-                    if (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
-                        $this->logger->info('Found og:image on Last.fm artist page (alt)', [
-                            'artist' => $artistName,
-                            'imageUrl' => $matches[1],
-                            'attempt' => $attempt,
-                        ]);
-                        return $matches[1];
-                    }
-
-                    $this->logger->debug('No og:image found on Last.fm artist page', ['artist' => $artistName]);
-                    return null;
-                }
-
-                if ($status === 404) {
-                    $this->logger->debug('Last.fm artist page not found', [
+                if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)
+                    || preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
+                    $this->logger->info('Found og:image on Last.fm artist page', [
                         'artist' => $artistName,
-                        'status' => $status,
-                    ]);
-                    return null;
-                }
-
-                if ($status === 403 || $status === 429 || $status >= 500 && $status < 600) {
-                    $this->logger->debug('Last.fm artist page blocked/throttled, retrying', [
-                        'artist' => $artistName,
-                        'status' => $status,
+                        'imageUrl' => $matches[1],
+                        'via' => $via,
                         'attempt' => $attempt,
                     ]);
-                    if ($attempt < $maxAttempts) {
-                        $this->sleepWithBackoff($attempt);
-                    }
-                    continue;
+                    return ['definitive' => true, 'imageUrl' => $matches[1], 'status' => $status];
                 }
 
-                $this->logger->debug('Last.fm artist page returned non-200', [
+                $this->logger->debug('No og:image found on Last.fm artist page', [
                     'artist' => $artistName,
-                    'status' => $status,
+                    'via' => $via,
                 ]);
-                return null;
+                return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
+            }
 
-            } catch (Throwable $e) {
-                $this->logger->warning('Failed to fetch Last.fm artist page', [
+            if ($status === 404) {
+                $this->logger->debug('Last.fm artist page not found', [
                     'artist' => $artistName,
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage(),
+                    'via' => $via,
                 ]);
-                if ($attempt < $maxAttempts) {
-                    $this->sleepWithBackoff($attempt);
-                    continue;
+                return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
+            }
+
+            $this->logger->debug('Last.fm artist page non-200', [
+                'artist' => $artistName,
+                'status' => $status,
+                'via' => $via,
+                'attempt' => $attempt,
+            ]);
+            return ['definitive' => false, 'imageUrl' => null, 'status' => $status];
+
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to fetch Last.fm artist page', [
+                'artist' => $artistName,
+                'via' => $via,
+                'attempt' => $attempt,
+                'error' => $e->getMessage(),
+            ]);
+            return ['definitive' => false, 'imageUrl' => null, 'status' => 0];
+        }
+    }
+
+    /**
+     * Load formatted proxy URLs from env
+     */
+    private function loadProxyPool(): array
+    {
+        if ($this->proxyPool !== null) {
+            return $this->proxyPool;
+        }
+
+        $protocol = strtolower(trim((string) ($_ENV['LASTFM_PROXY_PROTOCOL'] ?? 'http'))) ?: 'http';
+        $proxies = [];
+
+        $inline = trim((string) ($_ENV['LASTFM_PROXY_LIST'] ?? ''));
+        if ($inline !== '') {
+            $lines = preg_split('/[\r\n,]+/', $inline) ?: [];
+            foreach ($lines as $line) {
+                $formatted = $this->formatProxy(trim($line), $protocol);
+                if ($formatted !== null) {
+                    $proxies[] = $formatted;
                 }
-                return null;
             }
         }
 
-        $this->logger->warning('Last.fm artist page failed after retries', [
-            'artist' => $artistName,
-            'lastStatus' => $lastStatus,
-            'attempts' => $maxAttempts,
-        ]);
+        $listUrl = trim((string) ($_ENV['LASTFM_PROXY_LIST_URL'] ?? ''));
+        if ($listUrl !== '') {
+            $remoteList = $this->fetchProxyListFromUrl($listUrl);
+            foreach ($remoteList as $line) {
+                $formatted = $this->formatProxy($line, $protocol);
+                if ($formatted !== null) {
+                    $proxies[] = $formatted;
+                }
+            }
+        }
+
+        $proxies = array_values(array_unique($proxies));
+        $this->proxyPool = $proxies;
+
+        return $proxies;
+    }
+
+    /**
+     * Convert a proxy URI
+     */
+    private function formatProxy(string $line, string $protocol): ?string
+    {
+        if ($line === '' || str_starts_with($line, '#')) {
+            return null;
+        }
+
+        if (preg_match('#^[a-z0-9]+://#i', $line)) {
+            return $line;
+        }
+
+        $parts = explode(':', $line);
+        $count = count($parts);
+
+        if ($count === 2) {
+            [$host, $port] = $parts;
+            if ($host === '' || !ctype_digit($port)) {
+                return null;
+            }
+            return $protocol . '://' . $host . ':' . $port;
+        }
+
+        if ($count === 4) {
+            [$host, $port, $user, $pass] = $parts;
+            if ($host === '' || !ctype_digit($port)) {
+                return null;
+            }
+            return $protocol . '://' . rawurlencode($user) . ':' . rawurlencode($pass) . '@' . $host . ':' . $port;
+        }
+
         return null;
+    }
+
+    /**
+     * Fetch a remote proxy list with on-disk caching
+     */
+    private function fetchProxyListFromUrl(string $url): array
+    {
+        $ttl = (int) ($_ENV['LASTFM_PROXY_LIST_TTL'] ?? 86400);
+        if ($ttl <= 0) {
+            $ttl = 86400;
+        }
+
+        $cacheFile = $this->cacheDir . '/../proxies-' . md5($url) . '.txt';
+        $cacheDir = dirname($cacheFile);
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+
+        if (is_file($cacheFile) && time() - filemtime($cacheFile) < $ttl) {
+            $contents = (string) @file_get_contents($cacheFile);
+            return $this->splitProxyListBody($contents);
+        }
+
+        try {
+            $res = $this->http->get($url, [
+                'timeout' => 20,
+                'connect_timeout' => 5,
+                'http_errors' => false,
+                'headers' => ['Accept' => 'text/plain, */*'],
+            ]);
+
+            if ($res->getStatusCode() >= 200 && $res->getStatusCode() < 300) {
+                $body = (string) $res->getBody();
+                @file_put_contents($cacheFile, $body);
+                $this->logger->info('Refreshed proxy list from URL', [
+                    'url' => $url,
+                    'bytes' => strlen($body),
+                ]);
+                return $this->splitProxyListBody($body);
+            }
+
+            $this->logger->warning('Proxy list URL returned non-2xx', [
+                'url' => $url,
+                'status' => $res->getStatusCode(),
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to fetch proxy list URL', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        if (is_file($cacheFile)) {
+            $this->logger->debug('Falling back to stale proxy list cache', ['url' => $url]);
+            $contents = (string) @file_get_contents($cacheFile);
+            return $this->splitProxyListBody($contents);
+        }
+
+        return [];
+    }
+
+    private function splitProxyListBody(string $body): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $body) ?: [];
+        $out = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line !== '' && !str_starts_with($line, '#')) {
+                $out[] = $line;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -518,17 +677,6 @@ final class LastFmService
         ];
 
         return $agents[array_rand($agents)];
-    }
-
-    /**
-     * Sleep with exponential backoff and jitter
-     */
-    private function sleepWithBackoff(int $attempt): void
-    {
-        $baseMs = 300 * (2 ** ($attempt - 1));
-        $jitterMs = random_int(100, 500);
-        $totalUs = ($baseMs + $jitterMs) * 1000;
-        usleep($totalUs);
     }
 
     /**

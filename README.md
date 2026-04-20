@@ -52,6 +52,28 @@ docker compose up -d
 | `ADMIN_USER` | Admin panel username | Yes |
 | `ADMIN_PASSWORD` | Admin panel password | Yes |
 | `TZ` | Timezone (e.g., `America/Sao_Paulo`) | No |
+| `LASTFM_PROXY_LIST` | Inline proxy list used as fallback when Last.fm blocks direct scraping. Comma- or newline-separated. Each entry: `host:port`, `host:port:user:pass`, or a full URL like `http://user:pass@host:port` | No |
+| `LASTFM_PROXY_LIST_URL` | URL that returns a newline-separated proxy list (e.g. Webshare download link). Fetched list is cached on disk | No |
+| `LASTFM_PROXY_PROTOCOL` | Protocol used when formatting `host:port[:user:pass]` entries. Default: `http` (accepts `http`, `https`, `socks5`, etc.) | No |
+| `LASTFM_PROXY_LIST_TTL` | How long (in seconds) the remote proxy list is cached before being refreshed. Default: `86400` (24h) | No |
+
+#### Proxy fallback for artist image scraping
+
+In 2019, Last.fm removed the image API, and to access this content it is necessary to access the artist's page; in large volumes, requests are blocked (for example, `403`/`429`). Therefore, the possibility of using a proxy pool was added before resorting to Archive.org and MusicBrainz. You can provide proxies directly to the service via `LASTFM_PROXY_LIST` and/or from a remote URL via `LASTFM_PROXY_LIST_URL`; both sources are merged and the proxies are removed. The remote list is cached on disk and updated every 24 hours (configurable via `LASTFM_PROXY_LIST_TTL`).
+
+```env
+LASTFM_PROXY_LIST_URL=https://your-proxy-list
+LASTFM_PROXY_PROTOCOL=http
+LASTFM_PROXY_LIST_TTL=86400
+```
+
+Or using an inline list:
+
+```env
+LASTFM_PROXY_LIST=1.1.2.2:6754:user:pass,1.2.3.4:8080
+```
+
+Format per entry: `host:port`, `host:port:user:pass`, `http://user:pass@host:port`
 
 ### Persistent Data
 
