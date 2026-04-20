@@ -59,7 +59,7 @@ docker compose up -d
 
 #### Proxy fallback for artist image scraping
 
-In 2019, Last.fm removed the image API, and to access this content it is necessary to access the artist's page; in large volumes, requests are blocked (for example, `403`/`429`). Therefore, the possibility of using a proxy pool was added before resorting to Archive.org and MusicBrainz. You can provide proxies directly to the service via `LASTFM_PROXY_LIST` and/or from a remote URL via `LASTFM_PROXY_LIST_URL`; both sources are merged and the proxies are removed. The remote list is cached on disk and updated every 24 hours (configurable via `LASTFM_PROXY_LIST_TTL`).
+In 2019, Last.fm removed the image API, and to access this content it is necessary to access the artist's page; in large volumes, requests are blocked (for example, `403`/`429`). Therefore, the possibility of using a proxy pool. You can provide proxies directly to the service via `LASTFM_PROXY_LIST` and/or from a remote URL via `LASTFM_PROXY_LIST_URL`; both sources are merged and the proxies are removed. The remote list is cached on disk and updated every 24 hours (configurable via `LASTFM_PROXY_LIST_TTL`).
 
 ```env
 LASTFM_PROXY_LIST_URL=https://your-proxy-list
