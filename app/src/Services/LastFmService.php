@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Repositories\ArtistRepository;
+use App\Services\CurlImpersonateClient;
 use GuzzleHttp\Client as Guzzle;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -15,17 +16,20 @@ final class LastFmService
     private Guzzle $http;
     private LoggerInterface $logger;
     private ArtistRepository $artistRepository;
+    private CurlImpersonateClient $curlImpersonate;
     private ?array $proxyPool = null;
 
     public function __construct(
         Guzzle $http,
         LoggerInterface $logger,
         ArtistRepository $artistRepository,
+        CurlImpersonateClient $curlImpersonate,
         string $basePath
     ) {
         $this->http = $http;
         $this->logger = $logger;
         $this->artistRepository = $artistRepository;
+        $this->curlImpersonate = $curlImpersonate;
         $this->cacheDir = $basePath . '/data/cache/artists';
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0775, true);
@@ -380,6 +384,13 @@ final class LastFmService
             return $direct['imageUrl'];
         }
 
+        if ($this->curlImpersonate->isAvailable()) {
+            $impersonated = $this->tryFetchArtistPageImpersonated($url, $artistName);
+            if ($impersonated['definitive']) {
+                return $impersonated['imageUrl'];
+            }
+        }
+
         $proxies = $this->loadProxyPool();
         if ($proxies === []) {
             $this->logger->warning('Last.fm artist page failed, no proxy configured', [
@@ -405,6 +416,60 @@ final class LastFmService
             'directStatus' => $direct['status'],
             'proxyStatus' => $proxied['status'],
         ]);
+        return null;
+    }
+
+    /**
+     * Fetch the Last.fm artist page via curl-impersonate
+     */
+    private function tryFetchArtistPageImpersonated(string $url, string $artistName): array
+    {
+        $headers = [
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
+            'Referer' => 'https://www.google.com/search?q=' . rawurlencode($artistName . ' last.fm'),
+            'Upgrade-Insecure-Requests' => '1',
+        ];
+
+        $result = $this->curlImpersonate->get($url, $headers, 25, 10);
+        if ($result === null) {
+            $this->logger->debug('curl-impersonate: fetch failed', ['artist' => $artistName]);
+            return ['definitive' => false, 'imageUrl' => null, 'status' => 0];
+        }
+
+        $status = $result['status'];
+
+        if ($status === 200) {
+            $imageUrl = $this->extractOgImage($result['body']);
+            if ($imageUrl !== null) {
+                $this->logger->info('Found og:image via curl-impersonate', [
+                    'artist' => $artistName,
+                    'imageUrl' => $imageUrl,
+                ]);
+                return ['definitive' => true, 'imageUrl' => $imageUrl, 'status' => $status];
+            }
+            $this->logger->debug('No og:image via curl-impersonate', ['artist' => $artistName]);
+            return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
+        }
+
+        if ($status === 404) {
+            $this->logger->debug('Last.fm 404 via curl-impersonate', ['artist' => $artistName]);
+            return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
+        }
+
+        $this->logger->debug('curl-impersonate: non-success status', [
+            'artist' => $artistName,
+            'status' => $status,
+        ]);
+        return ['definitive' => false, 'imageUrl' => null, 'status' => $status];
+    }
+
+    private function extractOgImage(string $html): ?string
+    {
+        if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $m)
+            || preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $m)) {
+            return $m[1];
+        }
         return null;
     }
 
@@ -465,17 +530,15 @@ final class LastFmService
             $status = $res->getStatusCode();
 
             if ($status === 200) {
-                $html = (string) $res->getBody();
-
-                if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)
-                    || preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
+                $imageUrl = $this->extractOgImage((string) $res->getBody());
+                if ($imageUrl !== null) {
                     $this->logger->info('Found og:image on Last.fm artist page', [
                         'artist' => $artistName,
-                        'imageUrl' => $matches[1],
+                        'imageUrl' => $imageUrl,
                         'via' => $via,
                         'attempt' => $attempt,
                     ]);
-                    return ['definitive' => true, 'imageUrl' => $matches[1], 'status' => $status];
+                    return ['definitive' => true, 'imageUrl' => $imageUrl, 'status' => $status];
                 }
 
                 $this->logger->debug('No og:image found on Last.fm artist page', [

@@ -15,6 +15,7 @@ use App\Processors\UserProcessor;
 use App\Repositories\ArtistRepository;
 use App\Repositories\UserRepository;
 use App\Services\CryptoService;
+use App\Services\CurlImpersonateClient;
 use App\Services\I18nService;
 use App\Services\LastFmService;
 use App\Services\LoggerFactory;
@@ -78,10 +79,14 @@ final class App
             ]);
         });
 
+        $container->add(CurlImpersonateClient::class)
+            ->addArgument(LoggerInterface::class);
+
         $container->add(LastFmService::class)
             ->addArgument(GuzzleClient::class)
             ->addArgument(LoggerInterface::class)
             ->addArgument(ArtistRepository::class)
+            ->addArgument(CurlImpersonateClient::class)
             ->addArgument('basePath');
 
         $container->add(MontageService::class)
