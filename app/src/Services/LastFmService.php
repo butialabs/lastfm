@@ -71,7 +71,7 @@ final class LastFmService
                 $imageUrl = $this->pickLargestImageUrl($a['image']);
             }
 
-            $artistUrl = 'https://www.last.fm/music/' . rawurlencode($name);
+            $artistUrl = $this->buildLastFmArtistUrl($name);
             
             $artist = $this->artistRepository->findByName($name);
             
@@ -227,7 +227,7 @@ final class LastFmService
         }
         
         if (!$artist) {
-            $artistUrl = 'https://www.last.fm/music/' . rawurlencode($artistName);
+            $artistUrl = $this->buildLastFmArtistUrl($artistName);
             
             $artistId = $this->artistRepository->create([
                 'name' => $artistName,
@@ -371,8 +371,7 @@ final class LastFmService
      */
     private function fetchArtistImageFromLastFmPage(string $artistName): ?string
     {
-        $artistSlug = rawurlencode($artistName);
-        $url = 'https://www.last.fm/music/' . $artistSlug;
+        $url = $this->buildLastFmArtistUrl($artistName);
 
         $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
 
@@ -661,6 +660,25 @@ final class LastFmService
     }
 
     /**
+     * Normalises Unicode to NFC and converts %20 -> '+' to match Last.fm's URL convention
+     */
+    private function buildLastFmArtistUrl(string $artistName): string
+    {
+        $name = trim($artistName);
+
+        if (class_exists(\Normalizer::class)) {
+            $normalized = \Normalizer::normalize($name, \Normalizer::FORM_C);
+            if (is_string($normalized) && $normalized !== '') {
+                $name = $normalized;
+            }
+        }
+
+        $slug = str_replace('%20', '+', rawurlencode($name));
+
+        return 'https://www.last.fm/music/' . $slug;
+    }
+
+    /**
      * User-Agent from a rotating pool
      */
     private function pickBrowserUserAgent(): string
@@ -687,8 +705,7 @@ final class LastFmService
         $appUrl = trim((string) ($_ENV['APP_URL'] ?? 'https://lastfm.blue'));
         $userAgent = 'LastFM.blue/1.0 ( ' . $appUrl . ' )';
         
-        $artistSlug = rawurlencode($artistName);
-        $lastFmUrl = 'https://www.last.fm/music/' . $artistSlug;
+        $lastFmUrl = $this->buildLastFmArtistUrl($artistName);
         
         $this->logger->debug('Checking Archive.org for Last.fm artist page', ['url' => $lastFmUrl]);
         
@@ -702,7 +719,7 @@ final class LastFmService
         ];
         
         try {
-            $waybackApiUrl = 'https://archive.org/wayback/available?url=' . urlencode($lastFmUrl);
+            $waybackApiUrl = 'https://archive.org/wayback/available?url=' . $lastFmUrl;
             $res = $this->http->get($waybackApiUrl, $options);
             
             if ($res->getStatusCode() !== 200) {
