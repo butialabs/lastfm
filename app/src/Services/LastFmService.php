@@ -164,7 +164,7 @@ final class LastFmService
 
     /**
      * Force a re-download of the artist image from the default sources
-     * (Last.fm → Archive.org → MusicBrainz), overwriting any cached copy.
+     * (Last.fm → MusicBrainz), overwriting any cached copy.
      */
     public function regenerateArtistImage(int $artistId): bool
     {
@@ -183,9 +183,6 @@ final class LastFmService
         }
 
         $result = $this->fetchAndSaveFromLastFm($artist['name'], $path);
-        if ($result === '') {
-            $result = $this->fetchAndSaveFromArchiveOrg($artist['name'], $path);
-        }
         if ($result === '') {
             $imageData = $this->fetchFromMusicBrainz($artist['name'], $artist['musicbrainz_id'] ?? null);
             if ($imageData !== null) {
@@ -254,18 +251,7 @@ final class LastFmService
             return $result;
         }
 
-        // 2. Try Archive.org
-        $result = $this->fetchAndSaveFromArchiveOrg($artistName, $path);
-        if ($result !== '') {
-            if (empty($artist['image_hash'])) {
-                $this->artistRepository->update((int)$artist['id'], [
-                    'image_hash' => $hash
-                ]);
-            }
-            return $result;
-        }
-
-        // 3. MusicBrainz
+        // 2. MusicBrainz
         $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
         if ($imageData !== null) {
             file_put_contents($path, $imageData);
@@ -758,168 +744,6 @@ final class LastFmService
         ];
 
         return $agents[array_rand($agents)];
-    }
-
-    /**
-     * Fetch and save artist image using Archive.org
-     */
-    private function fetchAndSaveFromArchiveOrg(string $artistName, string $path): string
-    {
-        $appUrl = trim((string) ($_ENV['APP_URL'] ?? 'https://lastfm.blue'));
-        $userAgent = 'LastFM.blue/1.0 ( ' . $appUrl . ' )';
-        
-        $lastFmUrl = $this->buildLastFmArtistUrl($artistName);
-        
-        $this->logger->debug('Checking Archive.org for Last.fm artist page', ['url' => $lastFmUrl]);
-        
-        $options = [
-            'headers' => [
-                'Accept' => 'application/json',
-                'User-Agent' => $userAgent,
-            ],
-            'timeout' => 15,
-            'connect_timeout' => 5,
-        ];
-        
-        try {
-            $waybackApiUrl = 'https://archive.org/wayback/available?url=' . $lastFmUrl;
-            $res = $this->http->get($waybackApiUrl, $options);
-            
-            if ($res->getStatusCode() !== 200) {
-                $this->logger->debug('Archive.org API returned non-200', [
-                    'status' => $res->getStatusCode()
-                ]);
-                return '';
-            }
-            
-            $data = json_decode((string) $res->getBody(), true);
-            $snapshotUrl = $data['archived_snapshots']['closest']['url'] ?? null;
-            
-            if ($snapshotUrl === null) {
-                $this->logger->debug('No Archive.org snapshot available', ['artist' => $artistName]);
-                return '';
-            }
-            
-            $this->logger->debug('Found Archive.org snapshot', ['url' => $snapshotUrl]);
-            
-            $htmlOptions = [
-                'headers' => [
-                    'Accept' => 'text/html',
-                    'User-Agent' => $userAgent,
-                ],
-                'timeout' => 15,
-                'connect_timeout' => 5,
-            ];
-            
-            $res = $this->http->get($snapshotUrl, $htmlOptions);
-            
-            if ($res->getStatusCode() !== 200) {
-                $this->logger->debug('Archive.org snapshot page returned non-200', [
-                    'status' => $res->getStatusCode()
-                ]);
-                return '';
-            }
-            
-            $html = (string) $res->getBody();
-            
-            $archiveImageUrl = null;
-            if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $matches)) {
-                $archiveImageUrl = $matches[1];
-            } elseif (preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $matches)) {
-                $archiveImageUrl = $matches[1];
-            }
-            
-            if ($archiveImageUrl === null) {
-                $this->logger->debug('No og:image found in Archive.org snapshot', ['artist' => $artistName]);
-                return '';
-            }
-            
-            $this->logger->debug('Found og:image in Archive.org snapshot', ['imageUrl' => $archiveImageUrl]);
-            
-            $directImageUrl = $this->extractDirectUrlFromArchive($archiveImageUrl);
-            
-            if ($directImageUrl !== null) {
-                $this->logger->debug('Trying direct image URL', ['url' => $directImageUrl]);
-                
-                try {
-                    $res = $this->http->get($directImageUrl, [
-                        'headers' => [
-                            'Accept' => 'image/*',
-                            'User-Agent' => $userAgent,
-                        ],
-                        'timeout' => 10,
-                        'connect_timeout' => 5,
-                    ]);
-                    
-                    if ($res->getStatusCode() >= 200 && $res->getStatusCode() < 300) {
-                        $bin = (string) $res->getBody();
-                        if ($bin !== '') {
-                            file_put_contents($path, $bin);
-                            $this->logger->info('Downloaded image from direct URL', [
-                                'artist' => $artistName,
-                                'url' => $directImageUrl
-                            ]);
-                            return $path;
-                        }
-                    }
-                } catch (Throwable $e) {
-                    $this->logger->debug('Direct image URL download failed', [
-                        'url' => $directImageUrl,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-            
-            $this->logger->debug('Trying Archive.org image URL', ['url' => $archiveImageUrl]);
-            
-            try {
-                $res = $this->http->get($archiveImageUrl, [
-                    'headers' => [
-                        'Accept' => 'image/*',
-                        'User-Agent' => $userAgent,
-                    ],
-                    'timeout' => 15,
-                    'connect_timeout' => 5,
-                ]);
-                
-                if ($res->getStatusCode() >= 200 && $res->getStatusCode() < 300) {
-                    $bin = (string) $res->getBody();
-                    if ($bin !== '') {
-                        file_put_contents($path, $bin);
-                        $this->logger->info('Downloaded image from Archive.org', [
-                            'artist' => $artistName,
-                            'url' => $archiveImageUrl
-                        ]);
-                        return $path;
-                    }
-                }
-            } catch (Throwable $e) {
-                $this->logger->warning('Archive.org image download failed', [
-                    'url' => $archiveImageUrl,
-                    'error' => $e->getMessage()
-                ]);
-            }
-            
-        } catch (Throwable $e) {
-            $this->logger->warning('Archive.org fetch failed', [
-                'artist' => $artistName,
-                'error' => $e->getMessage()
-            ]);
-        }
-        
-        return '';
-    }
-
-    /**
-     * Extract direct URL from Archive.org URL format
-     */
-    private function extractDirectUrlFromArchive(string $archiveUrl): ?string
-    {
-        if (preg_match('#https?://web\.archive\.org/web/\d+(?:im_|id_|if_|js_|cs_)?/(https?://.+)#i', $archiveUrl, $matches)) {
-            return $matches[1];
-        }
-        
-        return null;
     }
 
     /**
