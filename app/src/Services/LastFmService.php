@@ -164,7 +164,7 @@ final class LastFmService
 
     /**
      * Force a re-download of the artist image from the default sources
-     * (Last.fm → MusicBrainz), overwriting any cached copy.
+     * from Last.fm, overwriting any cached copy.
      */
     public function regenerateArtistImage(int $artistId): bool
     {
@@ -183,13 +183,6 @@ final class LastFmService
         }
 
         $result = $this->fetchAndSaveFromLastFm($artist['name'], $path);
-        if ($result === '') {
-            $imageData = $this->fetchFromMusicBrainz($artist['name'], $artist['musicbrainz_id'] ?? null);
-            if ($imageData !== null) {
-                file_put_contents($path, $imageData);
-                $result = $path;
-            }
-        }
 
         if ($result === '' || !is_file($path)) {
             return false;
@@ -240,7 +233,6 @@ final class LastFmService
             $artist = ['id' => $artistId];
         }
 
-        // 1. Try Last.fm directly
         $result = $this->fetchAndSaveFromLastFm($artistName, $path);
         if ($result !== '') {
             if (empty($artist['image_hash'])) {
@@ -249,19 +241,6 @@ final class LastFmService
                 ]);
             }
             return $result;
-        }
-
-        // 2. MusicBrainz
-        $imageData = $this->fetchFromMusicBrainz($artistName, $mbid);
-        if ($imageData !== null) {
-            file_put_contents($path, $imageData);
-            
-            if (empty($artist['image_hash'])) {
-                $this->artistRepository->update((int)$artist['id'], [
-                    'image_hash' => $hash
-                ]);
-            }
-            return $path;
         }
 
         return '';
@@ -744,127 +723,6 @@ final class LastFmService
         ];
 
         return $agents[array_rand($agents)];
-    }
-
-    /**
-     * Fetch artist image from MusicBrainz/Cover Art Archive.
-     */
-    private function fetchFromMusicBrainz(string $artistName, ?string $mbid): ?string
-    {
-        $apiBase = 'https://musicbrainz.org/ws/2';
-        $appUrl = trim((string) ($_ENV['APP_URL'] ?? 'https://lastfm.blue'));
-        $userAgent = 'LastFM.blue/1.0 ( ' . $appUrl . ' )';
-        
-        $httpOptions = [
-            'headers' => [
-                'Accept' => 'application/json',
-                'User-Agent' => $userAgent,
-            ],
-            'timeout' => 10,
-            'connect_timeout' => 5,
-        ];
-        
-        try {
-            if ($mbid === null || $mbid === '') {
-                $searchUrl = $apiBase . '/artist/?query=' . urlencode('artist:' . $artistName) . '&type=artist&fmt=json&limit=5';
-                $this->logger->debug('MusicBrainz artist search', ['url' => $searchUrl]);
-                
-                $res = $this->http->get($searchUrl, $httpOptions);
-                
-                if ($res->getStatusCode() !== 200) {
-                    return null;
-                }
-                
-                $data = json_decode((string) $res->getBody(), true);
-                $artists = $data['artists'] ?? [];
-                
-                if (empty($artists)) {
-                    $this->logger->debug('MusicBrainz: artist not found', ['artist' => $artistName]);
-                    return null;
-                }
-                
-                $searchName = $this->normalizeArtistName($artistName);
-                $mbid = null;
-                foreach ($artists as $candidate) {
-                    $candidateName = $this->normalizeArtistName($candidate['name'] ?? '');
-                    if ($candidateName === $searchName) {
-                        $mbid = $candidate['id'];
-                        $this->logger->debug('MusicBrainz: name match found', [
-                            'artist' => $artistName,
-                            'matched' => $candidate['name'],
-                            'mbid' => $mbid,
-                        ]);
-                        break;
-                    }
-                }
-                
-                if ($mbid === null) {
-                    $this->logger->debug('MusicBrainz: no name match in results', [
-                        'artist' => $artistName,
-                        'results' => array_column($artists, 'name'),
-                    ]);
-                    return null;
-                }
-                
-                usleep(1100000);
-            }
-
-            $releasesUrl = $apiBase . '/release/?artist=' . urlencode($mbid) . '&fmt=json&limit=1';
-            $this->logger->debug('MusicBrainz releases lookup', ['mbid' => $mbid]);
-            
-            $res = $this->http->get($releasesUrl, $httpOptions);
-            
-            if ($res->getStatusCode() !== 200) {
-                return null;
-            }
-            
-            $data = json_decode((string) $res->getBody(), true);
-            $releaseId = $data['releases'][0]['id'] ?? null;
-            
-            if ($releaseId === null) {
-                $this->logger->debug('MusicBrainz: no releases found', ['artist' => $artistName]);
-                return null;
-            }
-
-            $coverUrl = 'https://coverartarchive.org/release/' . $releaseId . '/front-500';
-            $this->logger->debug('Fetching cover art', ['url' => $coverUrl]);
-            
-            $res = $this->http->get($coverUrl, [
-                'headers' => [
-                    'Accept' => 'image/*',
-                    'User-Agent' => $userAgent,
-                ],
-                'timeout' => 15,
-                'connect_timeout' => 5,
-                'allow_redirects' => true,
-            ]);
-            
-            if ($res->getStatusCode() >= 200 && $res->getStatusCode() < 300) {
-                $imageData = (string) $res->getBody();
-                if ($imageData !== '') {
-                    $this->logger->info('MusicBrainz: cover art fetched', ['artist' => $artistName]);
-                    return $imageData;
-                }
-            }
-        } catch (Throwable $e) {
-            $this->logger->warning('MusicBrainz fetch failed', ['artist' => $artistName, 'error' => $e->getMessage()]);
-        }
-
-        return null;
-    }
-
-    /**
-     * Normalize artist name for comparison (lowercase, normalize Unicode hyphens).
-     */
-    private function normalizeArtistName(string $name): string
-    {
-        $name = mb_strtolower(trim($name));
-        $name = str_replace(
-            ["\xE2\x80\x90", "\xE2\x80\x91", "\xE2\x80\x92", "\xE2\x80\x93", "\xE2\x80\x94", "\xEF\xBC\x8D"],
-            '-',
-            $name,
-        );
-        return $name;
     }
 
     /** @param mixed $images */
