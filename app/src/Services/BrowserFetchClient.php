@@ -55,6 +55,17 @@ final class BrowserFetchClient
             return null;
         }
 
+        $minMs = max(0, (int) ($_ENV['LASTFM_BROWSER_FETCH_JITTER_MIN_MS'] ?? 500));
+        $maxMs = max($minMs, (int) ($_ENV['LASTFM_BROWSER_FETCH_JITTER_MAX_MS'] ?? 2500));
+        $delayMs = $minMs === $maxMs ? $minMs : random_int($minMs, $maxMs);
+        if ($delayMs > 0) {
+            $this->logger->debug('browser-fetch: jitter before request', [
+                'mode' => $this->mode,
+                'delayMs' => $delayMs,
+            ]);
+            usleep($delayMs * 1000);
+        }
+
         $endpoint = $this->baseUrl . '/content';
         $options = [
             'timeout' => $timeout,
