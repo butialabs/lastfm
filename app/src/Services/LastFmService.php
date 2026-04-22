@@ -350,7 +350,7 @@ final class LastFmService
     private function downloadImageBinary(string $imageUrl, string $artistName): ?string
     {
         if ($this->curlImpersonate->isAvailable()) {
-            $result = $this->curlImpersonate->get($imageUrl, ['Accept' => 'image/*'], 20, 5);
+            $result = $this->curlImpersonate->get($imageUrl, [], 20, 5);
             if ($result === null) {
                 $this->logger->warning('Image download via curl-impersonate failed', [
                     'artist' => $artistName,
@@ -511,10 +511,7 @@ final class LastFmService
     private function tryFetchArtistPageImpersonated(string $url, string $artistName): array
     {
         $headers = [
-            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
             'Referer' => 'https://www.google.com/search?q=' . rawurlencode($artistName . ' last.fm'),
-            'Upgrade-Insecure-Requests' => '1',
         ];
 
         $result = $this->curlImpersonate->get($url, $headers, 25, 10);
