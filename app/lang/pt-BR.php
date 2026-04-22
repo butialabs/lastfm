@@ -162,8 +162,6 @@ return [
     'admin.artists.view_statistics' => 'Ver Estatísticas',
     'admin.artists.recent_stats' => 'Aparições Recentes',
     'admin.artists.lastfm_url' => 'URL do Last.fm',
-    'admin.artists.musicbrainz_id' => 'ID do MusicBrainz',
-    'admin.artists.musicbrainz_url' => 'URL do MusicBrainz',
     'admin.artists.image_hash' => 'Hash da Imagem',
     'admin.back_to_artists' => 'Voltar para Artistas',
     'admin.back_to_dashboard' => 'Voltar para o Painel',

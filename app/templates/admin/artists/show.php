@@ -37,20 +37,7 @@
                     </div>
 
                 </div>
-
-                <div class="mb-2">
-                    <strong
-                        class="d-block"><?= htmlspecialchars(__('admin.artists.musicbrainz_url'), ENT_QUOTES) ?>:</strong>
-                    <?php if (!empty($artist['musicbrainz_id'])): ?>
-                        <a href="https://musicbrainz.org/artist/<?= htmlspecialchars($artist['musicbrainz_id'], ENT_QUOTES) ?>"
-                            class="btn btn-outline-secondary btn-sm"  target="_blank" rel="noopener">
-                            <i class="bi bi-box-arrow-up-right"></i>
-                        </a>
-                    <?php else: ?>
-                        <span class="text-muted"><?= htmlspecialchars(__('admin.field.no_value'), ENT_QUOTES) ?></span>
-                    <?php endif; ?>
-                </div>
-
+                
                 <div>
                     <strong><?= htmlspecialchars(__('admin.created'), ENT_QUOTES) ?>:</strong>
                     <span><?= htmlspecialchars($artist['created_at'], ENT_QUOTES) ?></span>
