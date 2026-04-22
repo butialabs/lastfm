@@ -1,0 +1,41 @@
+services:
+  lastfm:
+    image: ghcr.io/butialabs/lastfm:latest
+    container_name: lastfm
+    environment:
+      TZ: ${TZ:-UTC}
+      APP_URL: ${APP_URL:-https://lastfm.blue}
+      LASTFM_API: ${LASTFM_API:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+      LASTFM_BROWSER_FETCH_MODE: sidecar
+      LASTFM_BROWSER_FETCH_URL: http://browser:3000
+    ports:
+      - 80:80
+    volumes:
+      - ./lastfm/data:/app/data
+    depends_on:
+      - browser
+    restart: unless-stopped
+    networks:
+      - lastfm
+
+  browser:
+    image: ghcr.io/browserless/chromium:latest
+    container_name: lastfm-browser
+    environment:
+      TZ: ${TZ:-UTC}
+      CONCURRENT: "2"
+      TIMEOUT: "30000"
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    restart: unless-stopped
+    networks:
+      - lastfm
+
+networks:
+  lastfm:
+    driver: bridge

@@ -17,8 +17,7 @@ final class CurlImpersonateClient
     public function __construct(LoggerInterface $logger)
     {
         $this->logger = $logger;
-        $this->binPath = trim((string) ($_ENV['LASTFM_CURL_IMPERSONATE_BIN'] ?? ''))
-            ?: '/usr/local/bin/curl_chrome116';
+        $this->binPath = '/usr/local/bin/curl_chrome116';
     }
 
     public function isAvailable(): bool
