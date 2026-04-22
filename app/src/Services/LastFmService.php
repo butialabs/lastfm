@@ -543,6 +543,7 @@ final class LastFmService
         $this->logger->debug('curl-impersonate: non-success status', [
             'artist' => $artistName,
             'status' => $status,
+            'bodySnippet' => substr($result['body'], 0, 300),
         ]);
         return ['definitive' => false, 'imageUrl' => null, 'status' => $status];
     }

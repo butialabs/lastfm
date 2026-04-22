@@ -14,7 +14,7 @@ use Throwable;
  */
 final class CurlImpersonateClient
 {
-    private const BROWSER = 'chrome116';
+    private const BROWSER = 'chrome136';
     private const FINGERPRINT_HEADERS = [
         'accept',
         'accept-encoding',
