@@ -550,10 +550,33 @@ final class LastFmService
 
     private function extractOgImage(string $html): ?string
     {
-        if (preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $html, $m)
-            || preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $html, $m)) {
-            return $m[1];
+        if ($html === '') {
+            return null;
         }
+
+        $dom = new \DOMDocument();
+        $prev = libxml_use_internal_errors(true);
+        $loaded = $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+
+        if (!$loaded) {
+            return null;
+        }
+
+        foreach ($dom->getElementsByTagName('meta') as $meta) {
+            if (!$meta instanceof \DOMElement) {
+                continue;
+            }
+            $property = strtolower($meta->getAttribute('property'));
+            if ($property === 'og:image' || $property === 'og:image:secure_url' || $property === 'og:image:url') {
+                $content = trim($meta->getAttribute('content'));
+                if ($content !== '') {
+                    return $content;
+                }
+            }
+        }
+
         return null;
     }
 
