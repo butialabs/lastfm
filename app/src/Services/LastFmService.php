@@ -175,6 +175,13 @@ final class LastFmService
             return false;
         }
 
+        $this->logger->info('Force Download triggered', [
+            'artistId' => $artistId,
+            'artist' => $artist['name'],
+            'curlImpersonate' => $this->curlImpersonate->isAvailable() ? 'available' : 'unavailable',
+            'tertiaryMode' => strtolower(trim((string) ($_ENV['LASTFM_BROWSER_FETCH_MODE'] ?? ''))) ?: 'disabled',
+        ]);
+
         $hash = !empty($artist['image_hash'])
             ? $artist['image_hash']
             : md5(strtolower(trim((string) $artist['name'])));
@@ -187,12 +194,22 @@ final class LastFmService
         $result = $this->fetchAndSaveFromLastFm($artist['name'], $path);
 
         if ($result === '' || !is_file($path)) {
+            $this->logger->warning('Force Download failed', [
+                'artistId' => $artistId,
+                'artist' => $artist['name'],
+            ]);
             return false;
         }
 
         if (empty($artist['image_hash'])) {
             $this->artistRepository->update($artistId, ['image_hash' => $hash]);
         }
+
+        $this->logger->info('Force Download succeeded', [
+            'artistId' => $artistId,
+            'artist' => $artist['name'],
+            'path' => $path,
+        ]);
 
         return true;
     }
@@ -318,23 +335,71 @@ final class LastFmService
             return '';
         }
 
+        $bin = $this->downloadImageBinary($imageUrl, $artistName);
+        if ($bin === null || $bin === '') {
+            return '';
+        }
+
+        file_put_contents($path, $bin);
+        return $path;
+    }
+
+    /**
+     * Download an image binary
+     */
+    private function downloadImageBinary(string $imageUrl, string $artistName): ?string
+    {
+        if ($this->curlImpersonate->isAvailable()) {
+            $result = $this->curlImpersonate->get($imageUrl, ['Accept' => 'image/*'], 20, 5);
+            if ($result === null) {
+                $this->logger->warning('Image download via curl-impersonate failed', [
+                    'artist' => $artistName,
+                    'url' => $imageUrl,
+                ]);
+                return null;
+            }
+            if ($result['status'] < 200 || $result['status'] >= 300 || $result['body'] === '') {
+                $this->logger->warning('Image download via curl-impersonate returned non-success', [
+                    'artist' => $artistName,
+                    'url' => $imageUrl,
+                    'status' => $result['status'],
+                ]);
+                return null;
+            }
+            return $result['body'];
+        }
+
+        $this->logger->debug('curl-impersonate unavailable, using direct Guzzle for image download', [
+            'artist' => $artistName,
+        ]);
+
         try {
             $res = $this->http->get($imageUrl, [
                 'headers' => ['Accept' => 'image/*'],
+                'timeout' => 15,
+                'connect_timeout' => 5,
+                'http_errors' => false,
             ]);
             $code = $res->getStatusCode();
             if ($code >= 200 && $code < 300) {
                 $bin = (string) $res->getBody();
                 if ($bin !== '') {
-                    file_put_contents($path, $bin);
-                    return $path;
+                    return $bin;
                 }
             }
+            $this->logger->warning('Artist image download returned non-success', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
+                'status' => $code,
+            ]);
         } catch (Throwable $e) {
-            $this->logger->warning('Artist image download failed', ['artist' => $artistName, 'error' => $e->getMessage()]);
+            $this->logger->warning('Artist image download failed', [
+                'artist' => $artistName,
+                'error' => $e->getMessage(),
+            ]);
         }
 
-        return '';
+        return null;
     }
 
     /**
