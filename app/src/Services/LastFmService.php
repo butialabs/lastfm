@@ -15,23 +15,17 @@ final class LastFmService
     private Guzzle $http;
     private LoggerInterface $logger;
     private ArtistRepository $artistRepository;
-    private CurlImpersonateClient $curlImpersonate;
-    private BrowserFetchClient $browserFetch;
     private ?array $proxyPool = null;
 
     public function __construct(
         Guzzle $http,
         LoggerInterface $logger,
         ArtistRepository $artistRepository,
-        CurlImpersonateClient $curlImpersonate,
-        BrowserFetchClient $browserFetch,
         string $basePath
     ) {
         $this->http = $http;
         $this->logger = $logger;
         $this->artistRepository = $artistRepository;
-        $this->curlImpersonate = $curlImpersonate;
-        $this->browserFetch = $browserFetch;
         $this->cacheDir = $basePath . '/data/cache/artists';
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0775, true);
@@ -78,9 +72,9 @@ final class LastFmService
             }
 
             $artistUrl = $this->buildLastFmArtistUrl($name);
-            
+
             $artist = $this->artistRepository->findByName($name);
-            
+
             if (!$artist) {
                 $artistId = $this->artistRepository->create([
                     'name' => $name,
@@ -90,14 +84,14 @@ final class LastFmService
                 ]);
             } else {
                 $artistId = (int) $artist['id'];
-                
+
                 if ($mbid !== '' && empty($artist['musicbrainz_id'])) {
                     $this->artistRepository->update($artistId, [
                         'musicbrainz_id' => $mbid
                     ]);
                 }
             }
-            
+
             if ($userId !== null) {
                 $this->artistRepository->recordStats($artistId, $userId, $position, $playcount);
             }
@@ -108,7 +102,7 @@ final class LastFmService
                 'imageUrl' => $imageUrl,
                 'mbid' => $mbid !== '' ? $mbid : null,
             ];
-            
+
             $position++;
             if (count($out) >= $limit) {
                 break;
@@ -178,8 +172,7 @@ final class LastFmService
         $this->logger->info('Force Download triggered', [
             'artistId' => $artistId,
             'artist' => $artist['name'],
-            'curlImpersonate' => $this->curlImpersonate->isAvailable() ? 'available' : 'unavailable',
-            'tertiaryMode' => strtolower(trim((string) ($_ENV['LASTFM_BROWSER_FETCH_MODE'] ?? ''))) ?: 'disabled',
+            'proxyFallback' => $this->loadProxyPool() !== [] ? 'available' : 'disabled',
         ]);
 
         $hash = !empty($artist['image_hash'])
@@ -217,18 +210,18 @@ final class LastFmService
     public function getArtistImagePath(string $artistName, ?string $imageUrl = null, ?string $mbid = null): string
     {
         $artist = $this->artistRepository->findByName($artistName);
-        
+
         if ($artist && !empty($artist['image_hash'])) {
             $hash = $artist['image_hash'];
             $path = $this->cacheDir . '/' . $hash . '.jpg';
-            
+
             if (is_file($path)) {
                 return $path;
             }
         } else {
             $hash = md5(strtolower(trim($artistName)));
             $path = $this->cacheDir . '/' . $hash . '.jpg';
-            
+
             if (is_file($path)) {
                 if ($artist) {
                     $this->artistRepository->update((int)$artist['id'], [
@@ -238,17 +231,17 @@ final class LastFmService
                 return $path;
             }
         }
-        
+
         if (!$artist) {
             $artistUrl = $this->buildLastFmArtistUrl($artistName);
-            
+
             $artistId = $this->artistRepository->create([
                 'name' => $artistName,
                 'lastfm_url' => $artistUrl,
                 'musicbrainz_id' => $mbid,
                 'image_hash' => null,
             ]);
-            
+
             $artist = ['id' => $artistId];
         }
 
@@ -278,34 +271,34 @@ final class LastFmService
         if (!$artist) {
             return false;
         }
-        
+
         $artistName = $artist['name'];
         $hash = $artist['image_hash'] ?? md5(strtolower(trim($artistName)));
         $path = $this->cacheDir . '/' . $hash . '.jpg';
-        
+
         if (is_file($path)) {
             unlink($path);
         }
-        
+
         try {
             $res = $this->http->get($imageUrl, [
                 'headers' => ['Accept' => 'image/*'],
                 'timeout' => 15,
                 'connect_timeout' => 5,
             ]);
-            
+
             $code = $res->getStatusCode();
             if ($code >= 200 && $code < 300) {
                 $bin = (string) $res->getBody();
                 if ($bin !== '') {
                     file_put_contents($path, $bin);
-                    
+
                     if (empty($artist['image_hash'])) {
                         $this->artistRepository->update($artistId, [
                             'image_hash' => $hash
                         ]);
                     }
-                    
+
                     $this->logger->info('Downloaded image from URL', [
                         'artist' => $artistName,
                         'url' => $imageUrl
@@ -320,7 +313,7 @@ final class LastFmService
                 'error' => $e->getMessage()
             ]);
         }
-        
+
         return false;
     }
 
@@ -345,41 +338,51 @@ final class LastFmService
     }
 
     /**
-     * Download an image binary
+     * Download an image binary via Guzzle, optionally retrying through the proxy pool.
      */
     private function downloadImageBinary(string $imageUrl, string $artistName): ?string
     {
-        if ($this->curlImpersonate->isAvailable()) {
-            $result = $this->curlImpersonate->get($imageUrl, [], 20, 5);
-            if ($result === null) {
-                $this->logger->warning('Image download via curl-impersonate failed', [
-                    'artist' => $artistName,
-                    'url' => $imageUrl,
-                ]);
-                return null;
-            }
-            if ($result['status'] < 200 || $result['status'] >= 300 || $result['body'] === '') {
-                $this->logger->warning('Image download via curl-impersonate returned non-success', [
-                    'artist' => $artistName,
-                    'url' => $imageUrl,
-                    'status' => $result['status'],
-                ]);
-                return null;
-            }
-            return $result['body'];
+        $direct = $this->fetchImageBinary($imageUrl, $artistName, null);
+        if ($direct !== null) {
+            return $direct;
         }
 
-        $this->logger->debug('curl-impersonate unavailable, using direct Guzzle for image download', [
+        $proxies = $this->loadProxyPool();
+        if ($proxies === []) {
+            return null;
+        }
+
+        $proxy = $proxies[array_rand($proxies)];
+        $this->logger->debug('Falling back to proxy for image download', [
             'artist' => $artistName,
+            'proxiesAvailable' => count($proxies),
         ]);
 
+        return $this->fetchImageBinary($imageUrl, $artistName, $proxy);
+    }
+
+    private function fetchImageBinary(string $imageUrl, string $artistName, ?string $proxy): ?string
+    {
+        $options = [
+            'headers' => [
+                'User-Agent' => $this->pickBrowserUserAgent(),
+                'Accept' => 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+                'Accept-Language' => 'en-US,en;q=0.9',
+                'Referer' => 'https://www.last.fm/',
+            ],
+            'timeout' => $proxy !== null ? 25 : 15,
+            'connect_timeout' => $proxy !== null ? 10 : 5,
+            'http_errors' => false,
+        ];
+
+        if ($proxy !== null) {
+            $options['proxy'] = $proxy;
+        }
+
+        $via = $proxy !== null ? 'proxy' : 'direct';
+
         try {
-            $res = $this->http->get($imageUrl, [
-                'headers' => ['Accept' => 'image/*'],
-                'timeout' => 15,
-                'connect_timeout' => 5,
-                'http_errors' => false,
-            ]);
+            $res = $this->http->get($imageUrl, $options);
             $code = $res->getStatusCode();
             if ($code >= 200 && $code < 300) {
                 $bin = (string) $res->getBody();
@@ -391,10 +394,12 @@ final class LastFmService
                 'artist' => $artistName,
                 'url' => $imageUrl,
                 'status' => $code,
+                'via' => $via,
             ]);
         } catch (Throwable $e) {
             $this->logger->warning('Artist image download failed', [
                 'artist' => $artistName,
+                'via' => $via,
                 'error' => $e->getMessage(),
             ]);
         }
@@ -411,141 +416,35 @@ final class LastFmService
 
         $this->logger->debug('Fetching Last.fm artist page', ['url' => $url]);
 
-        $primaryStatus = null;
-        $primaryVia = 'curl-impersonate';
-        if ($this->curlImpersonate->isAvailable()) {
-            $impersonated = $this->tryFetchArtistPageImpersonated($url, $artistName);
-            if ($impersonated['definitive']) {
-                return $impersonated['imageUrl'];
-            }
-            $primaryStatus = $impersonated['status'];
-        } else {
-            $this->logger->debug('curl-impersonate unavailable, using direct Guzzle request', [
-                'artist' => $artistName,
-            ]);
-            $primaryVia = 'direct';
-            $direct = $this->tryFetchArtistPage($url, $artistName, null, 1);
-            if ($direct['definitive']) {
-                return $direct['imageUrl'];
-            }
-            $primaryStatus = $direct['status'];
+        $direct = $this->tryFetchArtistPage($url, $artistName, null, 1);
+        if ($direct['definitive']) {
+            return $direct['imageUrl'];
         }
+        $primaryStatus = $direct['status'];
 
-        $mode = strtolower(trim((string) ($_ENV['LASTFM_BROWSER_FETCH_MODE'] ?? '')));
-        $tertiaryStatus = null;
+        $proxies = $this->loadProxyPool();
+        $proxyStatus = null;
+        if ($proxies !== []) {
+            $proxy = $proxies[array_rand($proxies)];
+            $this->logger->debug('Falling back to proxy', [
+                'artist' => $artistName,
+                'proxiesAvailable' => count($proxies),
+            ]);
 
-        if ($mode === 'proxy') {
-            $proxies = $this->loadProxyPool();
-            if ($proxies !== []) {
-                $proxy = $proxies[array_rand($proxies)];
-                $this->logger->debug('Falling back to proxy', [
-                    'artist' => $artistName,
-                    'proxiesAvailable' => count($proxies),
-                ]);
-
-                $proxied = $this->tryFetchArtistPage($url, $artistName, $proxy, 1);
-                if ($proxied['definitive']) {
-                    return $proxied['imageUrl'];
-                }
-                $tertiaryStatus = $proxied['status'];
+            $proxied = $this->tryFetchArtistPage($url, $artistName, $proxy, 1);
+            if ($proxied['definitive']) {
+                return $proxied['imageUrl'];
             }
-        } elseif (($mode === 'sidecar' || $mode === 'browserless') && $this->browserFetch->isAvailable()) {
-            $browser = $this->tryFetchArtistPageBrowser($url, $artistName);
-            if ($browser['definitive']) {
-                return $browser['imageUrl'];
-            }
-            $tertiaryStatus = $browser['status'];
+            $proxyStatus = $proxied['status'];
         }
 
         $this->logger->warning('Last.fm artist page failed after all fallbacks', [
             'artist' => $artistName,
-            'primaryVia' => $primaryVia,
             'primaryStatus' => $primaryStatus,
-            'tertiaryMode' => $mode !== '' ? $mode : 'disabled',
-            'tertiaryStatus' => $tertiaryStatus,
+            'proxyStatus' => $proxyStatus,
+            'proxyConfigured' => $proxies !== [],
         ]);
         return null;
-    }
-
-    /**
-     * Fetch the Last.fm artist page via a headless browser
-     */
-    private function tryFetchArtistPageBrowser(string $url, string $artistName): array
-    {
-        $this->logger->debug('Falling back to browser fetch', [
-            'artist' => $artistName,
-            'mode' => $this->browserFetch->mode(),
-        ]);
-
-        $result = $this->browserFetch->get($url);
-        if ($result === null) {
-            return ['definitive' => false, 'imageUrl' => null, 'status' => 0];
-        }
-
-        $status = $result['status'];
-        if ($status !== 200 || $result['body'] === '') {
-            $this->logger->debug('browser-fetch: unusable response', [
-                'artist' => $artistName,
-                'status' => $status,
-            ]);
-            return ['definitive' => false, 'imageUrl' => null, 'status' => $status];
-        }
-
-        $imageUrl = $this->extractOgImage($result['body']);
-        if ($imageUrl !== null) {
-            $this->logger->info('Found og:image via browser-fetch', [
-                'artist' => $artistName,
-                'mode' => $this->browserFetch->mode(),
-                'imageUrl' => $imageUrl,
-            ]);
-            return ['definitive' => true, 'imageUrl' => $imageUrl, 'status' => $status];
-        }
-
-        $this->logger->debug('No og:image via browser-fetch', ['artist' => $artistName]);
-        return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
-    }
-
-    /**
-     * Fetch the Last.fm artist page via curl-impersonate
-     */
-    private function tryFetchArtistPageImpersonated(string $url, string $artistName): array
-    {
-        $headers = [
-            'Referer' => 'https://www.google.com/search?q=' . rawurlencode($artistName . ' last.fm'),
-        ];
-
-        $result = $this->curlImpersonate->get($url, $headers, 25, 10);
-        if ($result === null) {
-            $this->logger->debug('curl-impersonate: fetch failed', ['artist' => $artistName]);
-            return ['definitive' => false, 'imageUrl' => null, 'status' => 0];
-        }
-
-        $status = $result['status'];
-
-        if ($status === 200) {
-            $imageUrl = $this->extractOgImage($result['body']);
-            if ($imageUrl !== null) {
-                $this->logger->info('Found og:image via curl-impersonate', [
-                    'artist' => $artistName,
-                    'imageUrl' => $imageUrl,
-                ]);
-                return ['definitive' => true, 'imageUrl' => $imageUrl, 'status' => $status];
-            }
-            $this->logger->debug('No og:image via curl-impersonate', ['artist' => $artistName]);
-            return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
-        }
-
-        if ($status === 404) {
-            $this->logger->debug('Last.fm 404 via curl-impersonate', ['artist' => $artistName]);
-            return ['definitive' => true, 'imageUrl' => null, 'status' => $status];
-        }
-
-        $this->logger->debug('curl-impersonate: non-success status', [
-            'artist' => $artistName,
-            'status' => $status,
-            'bodySnippet' => substr($result['body'], 0, 300),
-        ]);
-        return ['definitive' => false, 'imageUrl' => null, 'status' => $status];
     }
 
     private function extractOgImage(string $html): ?string
@@ -585,6 +484,15 @@ final class LastFmService
      */
     private function tryFetchArtistPage(string $url, string $artistName, ?string $proxy, int $attempt): array
     {
+        $minMs = max(0, (int) ($_ENV['LASTFM_FETCH_JITTER_MIN_MS'] ?? 0));
+        $maxMs = max($minMs, (int) ($_ENV['LASTFM_FETCH_JITTER_MAX_MS'] ?? 0));
+        if ($maxMs > 0) {
+            $delayMs = $minMs === $maxMs ? $minMs : random_int($minMs, $maxMs);
+            if ($delayMs > 0) {
+                usleep($delayMs * 1000);
+            }
+        }
+
         $referers = [
             'https://www.google.com/',
             'https://www.google.com/search?q=' . rawurlencode($artistName . ' last.fm'),

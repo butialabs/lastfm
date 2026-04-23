@@ -13,18 +13,6 @@ WORKDIR ${APP_PATH}
 RUN composer config platform.php-64bit 8.4 && \
     composer install --no-interaction --optimize-autoloader --no-dev
 
-RUN set -eux; \
-    arch="$(dpkg --print-architecture)"; \
-    case "$arch" in \
-        amd64) ci_dir=linux-x86_64 ;; \
-        arm64) ci_dir=linux-aarch64 ;; \
-        *) echo "Unsupported arch: $arch"; exit 1 ;; \
-    esac; \
-    bin="${APP_PATH}/vendor/hamaadraza/php-impersonate/bin/${ci_dir}/curl-impersonate"; \
-    test -f "$bin"; \
-    chmod +x "$bin"; \
-    "$bin" --version | grep -qi IMPERSONATE
-
 COPY crontab /etc/crontab.d/lastfm
 RUN chmod 0644 /etc/crontab.d/lastfm
 

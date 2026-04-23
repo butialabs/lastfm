@@ -52,49 +52,29 @@ docker compose up -d
 | `ADMIN_USER` | Admin panel username | Yes |
 | `ADMIN_PASSWORD` | Admin panel password | Yes |
 | `TZ` | Timezone (e.g., `America/Sao_Paulo`) | No |
-| `LASTFM_BROWSER_FETCH_MODE` | Fallback mode (runs after direct). One of: `proxy` (uses the proxy pool above), `sidecar` (self-hosted browserless/chromium), `browserless` (Browserless.io cloud). Leave empty to disable. Only one mode can be active at a time | No |
-| `LASTFM_BROWSER_FETCH_URL` | Base URL of the Browserless-compatible service. Required for `sidecar` mode (e.g. `http://browser:3000`). Defaults to `https://chrome.browserless.io` for `browserless` mode | No |
-| `LASTFM_BROWSERLESS_TOKEN` | API token for Browserless.io cloud. Required when `LASTFM_BROWSER_FETCH_MODE=browserless` | No |
 | `LASTFM_PROXY_LIST` | Inline proxy list used as fallback when Last.fm blocks direct scraping. Comma- or newline-separated. Each entry: `host:port`, `host:port:user:pass`, or a full URL like `http://user:pass@host:port` | No |
 | `LASTFM_PROXY_LIST_URL` | URL that returns a newline-separated proxy list (e.g. Webshare download link). Fetched list is cached on disk | No |
 | `LASTFM_PROXY_PROTOCOL` | Protocol used when formatting `host:port[:user:pass]` entries. Default: `http` (accepts `http`, `https`, `socks5`, etc.) | No |
 | `LASTFM_PROXY_LIST_TTL` | How long (in seconds) the remote proxy list is cached before being refreshed. Default: `86400` (24h) | No |
+| `LASTFM_FETCH_JITTER_MIN_MS` / `LASTFM_FETCH_JITTER_MAX_MS` | Optional random delay (in ms) applied before each Last.fm page request. Defaults to `0` (no jitter) | No |
 
 #### Artist image scraping
 
-In 2019, Last.fm removed the image API, and to access this content it is necessary to access the artist's page; in large volumes, requests are blocked (for example, `403`/`429`). The service falls back through a chain before giving up:
+In 2019, Last.fm removed the image API, so artist images have to be scraped from the public artist page. Under heavy traffic Last.fm will block requests (`403`/`429`). The service uses a simple two-stage Guzzle-based fallback:
 
-**Direct (curl-impersonate) -> Proxy pool *OR* headless browser**
+- The direct request rotates User-Agents, sets the full set of browser headers (`Sec-Fetch-*`, `Sec-Ch-Ua-*`, `Accept-Language`, etc.) and a randomised `Referer` to reduce bot-detection hits.
+- If the direct request fails (connection error, `403`, `429`, `5xx`…) and at least one proxy is configured via `LASTFM_PROXY_LIST` and/or `LASTFM_PROXY_LIST_URL`, the request is retried through a random proxy from the pool.
+- The remote proxy list is cached on disk and refreshed every 24h (configurable via `LASTFM_PROXY_LIST_TTL`). Inline and remote lists are merged and deduplicated.
 
-The third stage is selected exclusively via `LASTFM_BROWSER_FETCH_MODE`:
+Example:
 
-- `proxy`: uses the proxy pool from `LASTFM_PROXY_LIST` and/or `LASTFM_PROXY_LIST_URL`. Both sources are merged and deduplicated. The remote list is cached on disk and refreshed every 24h (configurable via `LASTFM_PROXY_LIST_TTL`).
-- `sidecar`: posts to a self-hosted `browserless/chromium` container. See [composer-browser.yml](composer-browser.yml) for a ready compose example
-- `browserless`: posts to the Browserless.io cloud API using `LASTFM_BROWSERLESS_TOKEN`.
-- empty: no fallback.
-
-Examples:
-**Proxy:**
 ```env
-LASTFM_BROWSER_FETCH_MODE=proxy
 LASTFM_PROXY_LIST_URL=https://your-proxy-list
 LASTFM_PROXY_PROTOCOL=http
 LASTFM_PROXY_LIST_TTL=86400
 ```
 
 Proxy list entries accept the formats: `host:port`, `host:port:user:pass`, or a full URL like `http://user:pass@host:port`.
-
-**Sidecar:**
-```env
-LASTFM_BROWSER_FETCH_MODE=sidecar
-LASTFM_BROWSER_FETCH_URL=http://browser:3000
-```
-
-**Cloud:**
-```env
-LASTFM_BROWSER_FETCH_MODE=browserless
-LASTFM_BROWSERLESS_TOKEN=your_token
-```
 
 ### Persistent Data
 

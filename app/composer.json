@@ -17,8 +17,7 @@
     "barryvanveen/lastfm": "^2.0.0",
     "nyholm/psr7": "^1.8",
     "nyholm/psr7-server": "^1.1",
-    "laminas/laminas-httphandlerrunner": "^2.13",
-    "hamaadraza/php-impersonate": "^1.0"
+    "laminas/laminas-httphandlerrunner": "^2.13"
   },
   "autoload": {
     "psr-4": {
