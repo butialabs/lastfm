@@ -373,10 +373,15 @@ final class LastFmService
             'timeout' => $proxy !== null ? 25 : 15,
             'connect_timeout' => $proxy !== null ? 10 : 5,
             'http_errors' => false,
+            'verify' => false,
         ];
 
         if ($proxy !== null) {
             $options['proxy'] = $proxy;
+            $options['curl'] = [
+                CURLOPT_PROXY_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY_SSL_VERIFYHOST => 0,
+            ];
         }
 
         $via = $proxy !== null ? 'proxy' : 'direct';
@@ -531,11 +536,15 @@ final class LastFmService
             ],
             'decode_content' => true,
             'http_errors' => false,
-            'verify' => true,
+            'verify' => false,
         ];
 
         if ($proxy !== null) {
             $options['proxy'] = $proxy;
+            $options['curl'] = [
+                CURLOPT_PROXY_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY_SSL_VERIFYHOST => 0,
+            ];
         }
 
         $via = $proxy !== null ? 'proxy' : 'direct';
