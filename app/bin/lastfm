@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use App\Bootstrap\App;
+use App\Processors\ArtistImageProcessor;
 use App\Processors\QueueProcessor;
 use App\Processors\UserProcessor;
 use League\CLImate\CLImate;
@@ -17,7 +18,7 @@ $climate->description('LastFM CLI');
 
 $climate->arguments->add([
     'command' => [
-        'description' => 'Command to execute (users, send)',
+        'description' => 'Command to execute (users, send, image)',
         'required' => false,
     ],
     'schedule' => [
@@ -29,6 +30,11 @@ $climate->arguments->add([
     'send' => [
         'longPrefix' => 'send',
         'description' => 'Process and send queued messages',
+        'noValue' => true,
+    ],
+    'download' => [
+        'longPrefix' => 'download',
+        'description' => 'Download missing artist images',
         'noValue' => true,
     ],
     'force' => [
@@ -66,6 +72,7 @@ if ($climate->arguments->get('help')) {
 $command = $climate->arguments->get('command');
 $isSchedule = $climate->arguments->get('schedule');
 $isSend = $climate->arguments->get('send');
+$isDownload = $climate->arguments->get('download');
 $isForce = $climate->arguments->get('force');
 $userId = $climate->arguments->get('id');
 
@@ -83,6 +90,19 @@ try {
         $climate->info('Running queue send processing...');
         $container->get(QueueProcessor::class)->runSend();
         $climate->green('Queue processing completed.');
+        exit(0);
+    }
+
+    // php bin/lastfm image --download
+    if ($command === 'image' && $isDownload) {
+        $climate->info('Downloading images for artists without one...');
+        $result = $container->get(ArtistImageProcessor::class)->downloadMissing();
+        $climate->green(sprintf(
+            'Image download finished. Total: %d, Success: %d, Failed: %d',
+            $result['total'],
+            $result['success'],
+            $result['failed']
+        ));
         exit(0);
     }
 
@@ -121,6 +141,7 @@ try {
     $climate->bold()->out('Usage:');
     $climate->tab()->out('php bin/lastfm users --schedule    Process scheduled users');
     $climate->tab()->out('php bin/lastfm users --send        Send queued messages');
+    $climate->tab()->out('php bin/lastfm image --download    Download images for artists without one');
     $climate->tab()->out('php bin/lastfm send --force --id=<user_id>  Force send for specific user');
     $climate->br();
     $climate->usage();

@@ -10,6 +10,7 @@ use App\Controllers\AuthController;
 use App\Controllers\MontageController;
 use App\Controllers\SettingsController;
 use App\Database\ConnectionFactory;
+use App\Processors\ArtistImageProcessor;
 use App\Processors\QueueProcessor;
 use App\Processors\UserProcessor;
 use App\Repositories\ArtistRepository;
@@ -143,6 +144,11 @@ final class App
             ->addArgument(LastFmService::class)
             ->addArgument(BlueskyClient::class)
             ->addArgument(MastodonClient::class)
+            ->addArgument(LoggerFactory::class);
+
+        $container->add(ArtistImageProcessor::class)
+            ->addArgument(ArtistRepository::class)
+            ->addArgument(LastFmService::class)
             ->addArgument(LoggerFactory::class);
 
         $container->add(AdminController::class)

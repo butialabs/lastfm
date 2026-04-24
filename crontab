@@ -3,3 +3,6 @@
 
 # Send scheduled
 * * * * * /usr/local/bin/php /app/bin/lastfm users --send 2>&1 | tee -a /tmp/send.log
+
+# Download missing artist images (daily at 04:00)
+0 4 * * * /usr/local/bin/php /app/bin/lastfm image --download 2>&1 | tee -a /tmp/image-download.log
