@@ -428,25 +428,48 @@ final class LastFmService
         $primaryStatus = $direct['status'];
 
         $proxies = $this->loadProxyPool();
-        $proxyStatus = null;
+        $proxyStatuses = [];
         if ($proxies !== []) {
-            $proxy = $proxies[array_rand($proxies)];
-            $this->logger->debug('Falling back to proxy', [
-                'artist' => $artistName,
-                'proxiesAvailable' => count($proxies),
-            ]);
+            $maxProxyAttempts = 3;
+            $pool = $proxies;
+            shuffle($pool);
 
-            $proxied = $this->tryFetchArtistPage($url, $artistName, $proxy, 1);
-            if ($proxied['definitive']) {
-                return $proxied['imageUrl'];
+            for ($attempt = 1; $attempt <= $maxProxyAttempts; $attempt++) {
+                $proxy = $pool[($attempt - 1) % count($pool)];
+
+                $this->logger->debug('Falling back to proxy', [
+                    'artist' => $artistName,
+                    'proxiesAvailable' => count($proxies),
+                    'attempt' => $attempt,
+                    'maxAttempts' => $maxProxyAttempts,
+                ]);
+
+                $proxied = $this->tryFetchArtistPage($url, $artistName, $proxy, $attempt);
+                if ($proxied['definitive']) {
+                    return $proxied['imageUrl'];
+                }
+                $proxyStatuses[] = $proxied['status'];
+
+                if ($attempt < $maxProxyAttempts) {
+                    $minMs = 500 + (($attempt - 1) * 750);
+                    $maxMs = 1500 + (($attempt - 1) * 1500);
+                    $waitMs = random_int($minMs, $maxMs);
+
+                    $this->logger->debug('Waiting before next proxy attempt', [
+                        'artist' => $artistName,
+                        'attempt' => $attempt,
+                        'waitMs' => $waitMs,
+                    ]);
+
+                    usleep($waitMs * 1000);
+                }
             }
-            $proxyStatus = $proxied['status'];
         }
 
         $this->logger->warning('Last.fm artist page failed after all fallbacks', [
             'artist' => $artistName,
             'primaryStatus' => $primaryStatus,
-            'proxyStatus' => $proxyStatus,
+            'proxyStatuses' => $proxyStatuses,
             'proxyConfigured' => $proxies !== [],
         ]);
         return null;
