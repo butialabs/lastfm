@@ -79,7 +79,7 @@ final class QueueProcessor
             $language = (string) ($user['language'] ?? 'en');
             $montagePath = (string) ($user['social_montage'] ?? '');
 
-            $text = $this->buildPostText($user, $language);
+            $text = $this->buildPostText($user, $language, $protocol);
             $threads = $this->splitTextForProtocol($text, $protocol);
 
             $montageFilePath = $this->users->montageUrlToFilePath($montagePath);
@@ -135,10 +135,9 @@ final class QueueProcessor
     }
 
     /** @param array<string,mixed> $user */
-    private function buildPostText(array $user, string $language): string
+    private function buildPostText(array $user, string $language, string $protocol): string
     {
-        $proto = (string) $user['protocol'];
-        $mention = $proto === 'mastodon' ? '@lfm_blue@mastodon.social' : '@lastfm.blue';
+        $mention = $protocol === 'mastodon' ? '@lfm_blue@mastodon.social' : '@lastfm.blue';
         $username = (string) ($user['lastfm_username'] ?? '');
 
         $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
@@ -152,14 +151,16 @@ final class QueueProcessor
         $artistList = implode(' ', $artistParts);
         $scrobblesText = __('post.scrobbles', [$totalScrobbles], $language);
 
-        return sprintf(
-            '♫ %s: %s. #myweekcounted %s #music %s %s',
-            __('post.top_artists', [], $language),
-            $artistList,
-            $scrobblesText,
-            __('post.via', [], $language),
-            $mention
-        );
+        $prefix = sprintf('♫ %s: ', __('post.top_artists', [], $language));
+        $suffix = sprintf('. #myweekcounted %s #music %s %s', $scrobblesText, __('post.via', [], $language), $mention);
+
+        $limit = $protocol === 'mastodon' ? 500 : 253;
+        $available = $limit - mb_strlen($prefix) - mb_strlen($suffix);
+        if ($available > 3 && mb_strlen($artistList) > $available) {
+            $artistList = rtrim(mb_substr($artistList, 0, $available - 3)) . '...';
+        }
+
+        return $prefix . $artistList . $suffix;
     }
 
     private function generateAltText(array $chart, string $language): string
@@ -173,7 +174,7 @@ final class QueueProcessor
     /** @return list<string> */
     private function splitTextForProtocol(string $text, string $protocol): array
     {
-        $limit = $protocol === 'mastodon' ? 500 : 300;
+        $limit = $protocol === 'mastodon' ? 500 : 253;
         if (mb_strlen($text) <= $limit) {
             return [$text];
         }
