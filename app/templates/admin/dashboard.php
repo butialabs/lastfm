@@ -127,6 +127,12 @@
 	</div>
 </div>
 
+<div class="d-flex justify-content-end mb-2">
+	<button type="button" id="reset-errors-btn" class="btn btn-danger">
+		<i class="bi bi-arrow-counterclockwise me-1"></i><?= htmlspecialchars(__('admin.users.reset_errors'), ENT_QUOTES) ?>
+	</button>
+</div>
+
 <div class="card">
 	<div class="card-body overflow-auto p-0">
 		<table class="table table-striped table-hover mb-0">
@@ -245,6 +251,11 @@
 									data-user-id="<?= (int) $user['id'] ?>"
 									title="<?= htmlspecialchars(__('admin.table.view_user'), ENT_QUOTES) ?>">
 									<i class="bi bi-eye"></i>
+								</button>
+								<button type="button" class="btn btn-sm btn-outline-warning force-send-btn"
+									data-user-id="<?= (int) $user['id'] ?>"
+									title="<?= htmlspecialchars(__('admin.table.force_send'), ENT_QUOTES) ?>">
+									<i class="bi bi-send"></i>
 								</button>
 							</td>
 						</tr>
@@ -414,6 +425,51 @@
 
 			html += '</tbody></table>';
 			return html;
+		}
+
+		const forceSendTitle = <?= json_encode(__('admin.table.force_send')) ?>;
+		const forceSendConfirm = <?= json_encode(__('admin.users.force_send_confirm')) ?>;
+		const resetErrorsConfirm = <?= json_encode(__('admin.users.reset_errors_confirm')) ?>;
+		const resetErrorsDone = <?= json_encode(__('admin.users.reset_errors_done')) ?>;
+
+		document.querySelectorAll('.force-send-btn').forEach(function (btn) {
+			btn.addEventListener('click', function () {
+				const userId = this.getAttribute('data-user-id');
+				if (!confirm(forceSendConfirm)) return;
+				this.disabled = true;
+				const self = this;
+				fetch('/admin/user/' + userId + '/force-send', { method: 'POST' })
+					.then(function (r) { return r.json(); })
+					.then(function (data) {
+						if (data.success) {
+							location.reload();
+						} else {
+							alert(data.error || errorLoading);
+							self.disabled = false;
+						}
+					})
+					.catch(function () { self.disabled = false; });
+			});
+		});
+
+		const resetBtn = document.getElementById('reset-errors-btn');
+		if (resetBtn) {
+			resetBtn.addEventListener('click', function () {
+				if (!confirm(resetErrorsConfirm)) return;
+				resetBtn.disabled = true;
+				fetch('/admin/users/reset-errors', { method: 'POST' })
+					.then(function (r) { return r.json(); })
+					.then(function (data) {
+						if (data.success) {
+							alert(resetErrorsDone.replace('%d', data.affected));
+							location.reload();
+						} else {
+							alert(data.error || errorLoading);
+							resetBtn.disabled = false;
+						}
+					})
+					.catch(function () { resetBtn.disabled = false; });
+			});
 		}
 
 		document.querySelectorAll('.view-user-btn').forEach(function (btn) {

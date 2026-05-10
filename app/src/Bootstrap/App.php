@@ -192,6 +192,8 @@ final class App
         $router->map('POST', '/admin/login', [AdminController::class, 'login']);
         $router->map('POST', '/admin/logout', [AdminController::class, 'logout']);
         $router->map('GET', '/admin/user/{id:\d+}', [AdminController::class, 'showUser']);
+        $router->map('POST', '/admin/user/{id:\d+}/force-send', [AdminController::class, 'forceSendUser']);
+        $router->map('POST', '/admin/users/reset-errors', [AdminController::class, 'resetErrorUsers']);
         
         $router->map('GET', '/admin/artists', [ArtistController::class, 'index']);
         $router->map('GET', '/admin/artists/statistics', [ArtistController::class, 'statistics']);

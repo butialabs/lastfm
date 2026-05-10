@@ -114,6 +114,44 @@ final class AdminController
         return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);
     }
 
+    public function forceSendUser(ServerRequestInterface $request, array $args): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $userId = (int) ($args['id'] ?? 0);
+        if ($userId <= 0) {
+            return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid user ID']));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT id FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        if (!$stmt->fetch()) {
+            return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'User not found']));
+        }
+
+        $this->pdo->prepare("UPDATE users SET status = 'QUEUED', error_count = 0, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+            ->execute([':id' => $userId]);
+
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode(['success' => true]));
+    }
+
+    public function resetErrorUsers(ServerRequestInterface $request): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $stmt = $this->pdo->prepare("UPDATE users SET status = 'SCHEDULE', error_count = 0, updated_at = CURRENT_TIMESTAMP WHERE status = 'ERROR'");
+        $stmt->execute();
+        $affected = $stmt->rowCount();
+
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode(['success' => true, 'affected' => $affected]));
+    }
+
     public function showUser(ServerRequestInterface $request, array $args): ResponseInterface
     {
         session_start_safe();

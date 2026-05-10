@@ -205,4 +205,11 @@ return [
     'admin.pagination.navigation' => 'Navegação de páginas',
     'admin.pagination.previous' => 'Anterior',
     'admin.pagination.next' => 'Próxima',
+
+    // User bulk actions
+    'admin.table.force_send' => 'Forçar envio',
+    'admin.users.reset_errors' => 'Resetar usuários com erro',
+    'admin.users.force_send_confirm' => 'Colocar este usuário na fila para envio imediato?',
+    'admin.users.reset_errors_confirm' => 'Resetar todos os usuários com ERRO para SCHEDULE e zerar a contagem?',
+    'admin.users.reset_errors_done' => '%d usuário(s) resetado(s) com sucesso.',
 ];

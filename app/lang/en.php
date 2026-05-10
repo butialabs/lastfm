@@ -204,4 +204,11 @@ return [
     'admin.pagination.navigation' => 'Page navigation',
     'admin.pagination.previous' => 'Previous',
     'admin.pagination.next' => 'Next',
+
+    // User bulk actions
+    'admin.table.force_send' => 'Force send',
+    'admin.users.reset_errors' => 'Reset error users',
+    'admin.users.force_send_confirm' => 'Queue this user for immediate sending?',
+    'admin.users.reset_errors_confirm' => 'Reset all ERROR users to SCHEDULE and clear error count?',
+    'admin.users.reset_errors_done' => '%d user(s) reset successfully.',
 ];
