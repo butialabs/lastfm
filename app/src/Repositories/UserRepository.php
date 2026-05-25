@@ -290,22 +290,18 @@ final class UserRepository
         ]);
     }
 
-    public function incrementError(int $userId, string $message, bool $temporary): int
+    public function incrementError(int $userId, string $message, bool $temporary, string $retryStatus = 'QUEUED'): int
     {
-        $user = $this->findById($userId);
-        $count = (int) ($user['error_count'] ?? 0);
-        $count++;
-        $status = $temporary ? 'QUEUED' : 'ERROR';
+        $status = $temporary ? $retryStatus : 'ERROR';
+        $now = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM);
 
-        $stmt = $this->pdo->prepare('UPDATE users SET error_count = :e, status = :s, callback = :c, updated_at = :u WHERE id = :id');
-        $stmt->execute([
-            ':e' => $count,
-            ':s' => $status,
-            ':c' => $message,
-            ':u' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM),
-            ':id' => $userId,
-        ]);
-        return $count;
+        $this->pdo->prepare(
+            'UPDATE users SET error_count = error_count + 1, status = :s, callback = :c, updated_at = :u WHERE id = :id'
+        )->execute([':s' => $status, ':c' => $message, ':u' => $now, ':id' => $userId]);
+
+        $stmt = $this->pdo->prepare('SELECT error_count FROM users WHERE id = :id');
+        $stmt->execute([':id' => $userId]);
+        return (int) $stmt->fetchColumn();
     }
 
     public function resetOnAccess(int $userId, array $user): void

@@ -93,7 +93,7 @@ final class UserProcessor
             return true;
         } catch (Throwable $e) {
             $this->logger->error('user_processor failed', ['user_id' => $userId, 'error' => $e->getMessage()]);
-            $this->users->incrementError($userId, $e->getMessage(), temporary: true);
+            $this->users->incrementError($userId, $e->getMessage(), temporary: true, retryStatus: 'SCHEDULE');
             return false;
         }
     }
