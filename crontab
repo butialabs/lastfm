@@ -1,8 +1,8 @@
 # Schedule to publish
-* * * * * /usr/local/bin/php /app/bin/lastfm users --schedule 2>&1 | tee -a /tmp/schedule.log
+* * * * * flock -n /tmp/lastfm_schedule.lock /usr/local/bin/php /app/bin/lastfm users --schedule >> /app/data/logs/schedule.log 2>&1
 
 # Send scheduled
-* * * * * /usr/local/bin/php /app/bin/lastfm users --send 2>&1 | tee -a /tmp/send.log
+* * * * * flock -n /tmp/lastfm_send.lock /usr/local/bin/php /app/bin/lastfm users --send >> /app/data/logs/send.log 2>&1
 
 # Download missing artist images (daily at 04:00)
-0 4 * * * /usr/local/bin/php /app/bin/lastfm image --download 2>&1 | tee -a /tmp/image-download.log
+0 4 * * * flock -n /tmp/lastfm_image.lock /usr/local/bin/php /app/bin/lastfm image --download >> /app/data/logs/image-download.log 2>&1

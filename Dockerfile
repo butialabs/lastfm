@@ -1,5 +1,7 @@
 FROM shinsenter/php:8.4-fpm-nginx
 
+RUN apt-get update && apt-get install -y --no-install-recommends util-linux && rm -rf /var/lib/apt/lists/*
+
 ENV ENABLE_CRONTAB=1
 ENV APP_PATH=/app
 ENV DOCUMENT_ROOT=public
