@@ -39,6 +39,9 @@ final class SettingsController
             return redirect('/');
         }
 
+        $this->users->resetOnAccess($userId, $user);
+        $user = $this->users->findById($userId) ?? $user;
+
         $locale = (string) ($user['language'] ?? 'en');
         if (!in_array($locale, ['en', 'pt-BR'], true)) {
             $locale = 'en';

@@ -308,6 +308,26 @@ final class UserRepository
         return $count;
     }
 
+    public function resetOnAccess(int $userId, array $user): void
+    {
+        $hasLastfm = isset($user['lastfm_username']) && $user['lastfm_username'] !== '';
+        $currentStatus = (string) ($user['status'] ?? 'ACTIVE');
+        $errorCount = (int) ($user['error_count'] ?? 0);
+
+        $newStatus = ($hasLastfm && $currentStatus === 'ERROR') ? 'SCHEDULE' : $currentStatus;
+
+        if ($errorCount === 0 && $newStatus === $currentStatus) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare('UPDATE users SET error_count = 0, status = :s, updated_at = :u WHERE id = :id');
+        $stmt->execute([
+            ':s' => $newStatus,
+            ':u' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM),
+            ':id' => $userId,
+        ]);
+    }
+
     public function countActiveUsers(): int
     {
         $stmt = $this->pdo->query("SELECT COUNT(*) FROM users WHERE status IN ('ACTIVE', 'SCHEDULE')");
