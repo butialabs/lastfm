@@ -23,6 +23,10 @@ if (!function_exists('__')) {
             $candidate = str_starts_with(strtolower($accept), 'pt') ? 'pt-BR' : 'en';
         }
 
+        if (!in_array($candidate, ['en', 'pt-BR'], true)) {
+            $candidate = 'en';
+        }
+
         $file = $langDir . '/' . $candidate . '.php';
         $fallback = $langDir . '/en.php';
 
@@ -128,6 +132,16 @@ if (!function_exists('session_destroy_safe')) {
     {
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION = [];
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                $params['secure'],
+                $params['httponly']
+            );
             session_destroy();
         }
     }
