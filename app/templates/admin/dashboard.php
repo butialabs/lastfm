@@ -432,13 +432,15 @@
 		const resetErrorsConfirm = <?= json_encode(__('admin.users.reset_errors_confirm')) ?>;
 		const resetErrorsDone = <?= json_encode(__('admin.users.reset_errors_done')) ?>;
 
+		const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
 		document.querySelectorAll('.force-send-btn').forEach(function (btn) {
 			btn.addEventListener('click', function () {
 				const userId = this.getAttribute('data-user-id');
 				if (!confirm(forceSendConfirm)) return;
 				this.disabled = true;
 				const self = this;
-				fetch('/admin/user/' + userId + '/force-send', { method: 'POST' })
+				fetch('/admin/user/' + userId + '/force-send', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
 					.then(function (r) { return r.json(); })
 					.then(function (data) {
 						if (data.success) {
@@ -457,7 +459,7 @@
 			resetBtn.addEventListener('click', function () {
 				if (!confirm(resetErrorsConfirm)) return;
 				resetBtn.disabled = true;
-				fetch('/admin/users/reset-errors', { method: 'POST' })
+				fetch('/admin/users/reset-errors', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
 					.then(function (r) { return r.json(); })
 					.then(function (data) {
 						if (data.success) {

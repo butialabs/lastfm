@@ -15,6 +15,7 @@
 					<?php } ?>
 				</p>
 				<form id="lastfm" method="post" action="/logout" >
+					<?= csrf_field() ?>
 					<button type="submit"><?php echo htmlspecialchars(__('settings.logout'), ENT_QUOTES); ?></button>
 				</form>
 			</div>
@@ -73,6 +74,7 @@
 
 		<div class="save" style="display: <?php echo $haveData ? 'none' : 'flex' ?>">
 			<form id="save" method="post" action="/settings" autocomplete="off" data-form-type="other">
+				<?= csrf_field() ?>
 				<div class="form-fill">
 					<div class="form-row">
 						<input type="text" id="lastfm_username" name="lastfm_username" placeholder="<?php echo htmlspecialchars(__('settings.lastfm_username'), ENT_QUOTES); ?>" value="<?php echo htmlspecialchars($user['lastfm_username'] ?? '', ENT_QUOTES); ?>" required>
@@ -119,6 +121,7 @@
 
 		<div class="delete">
 			<form id="delete_account" method="post" action="/account/delete" >
+				<?= csrf_field() ?>
 				<button type="submit" id="delete_button" data-confirm="<?php echo htmlspecialchars(__('settings.confirm_delete'), ENT_QUOTES); ?>"><?php echo htmlspecialchars(__('settings.remove_account'), ENT_QUOTES); ?></button>
 			</form>
 		</div>

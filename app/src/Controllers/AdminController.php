@@ -121,6 +121,11 @@ final class AdminController
             return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
         }
 
+        $csrfToken = $request->getHeaderLine('X-CSRF-Token');
+        if (!csrf_verify($csrfToken)) {
+            return new Response(403, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid CSRF token']));
+        }
+
         $userId = (int) ($args['id'] ?? 0);
         if ($userId <= 0) {
             return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid user ID']));
@@ -143,6 +148,11 @@ final class AdminController
         session_start_safe();
         if (!$this->isAuthenticated()) {
             return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $csrfToken = $request->getHeaderLine('X-CSRF-Token');
+        if (!csrf_verify($csrfToken)) {
+            return new Response(403, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid CSRF token']));
         }
 
         $stmt = $this->pdo->prepare("UPDATE users SET status = 'SCHEDULE', error_count = 0, updated_at = CURRENT_TIMESTAMP WHERE status = 'ERROR'");
@@ -200,6 +210,11 @@ final class AdminController
         $username = trim((string) ($body['username'] ?? ''));
         $password = (string) ($body['password'] ?? '');
 
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            $html = $this->views->render('admin/login', ['error' => 'Invalid request']);
+            return new Response(403, ['Content-Type' => 'text/html; charset=utf-8'], $html);
+        }
+
         $adminUser = $_ENV['ADMIN_USER'] ?? '';
         $adminPassword = $_ENV['ADMIN_PASSWORD'] ?? '';
 
@@ -210,7 +225,8 @@ final class AdminController
             return new Response(500, ['Content-Type' => 'text/html; charset=utf-8'], $html);
         }
 
-        if ($username === $adminUser && $password === $adminPassword) {
+        if (hash_equals($adminUser, $username) && hash_equals($adminPassword, $password)) {
+            session_regenerate_id(true);
             session_set('admin_authenticated', true);
             return redirect('/admin');
         }
@@ -225,7 +241,11 @@ final class AdminController
     public function logout(ServerRequestInterface $request): ResponseInterface
     {
         session_start_safe();
-        session_remove('admin_authenticated');
+        $body = (array) ($request->getParsedBody() ?? []);
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            return redirect('/admin');
+        }
+        session_destroy_safe();
         return redirect('/admin/login');
     }
 

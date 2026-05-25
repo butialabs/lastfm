@@ -133,6 +133,32 @@ if (!function_exists('session_destroy_safe')) {
     }
 }
 
+if (!function_exists('csrf_token')) {
+    function csrf_token(): string
+    {
+        session_start_safe();
+        if (empty($_SESSION['_csrf_token'])) {
+            $_SESSION['_csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return (string) $_SESSION['_csrf_token'];
+    }
+}
+
+if (!function_exists('csrf_field')) {
+    function csrf_field(): string
+    {
+        return '<input type="hidden" name="_csrf" value="' . htmlspecialchars(csrf_token(), ENT_QUOTES) . '">';
+    }
+}
+
+if (!function_exists('csrf_verify')) {
+    function csrf_verify(string $submitted): bool
+    {
+        $token = csrf_token();
+        return $token !== '' && hash_equals($token, $submitted);
+    }
+}
+
 if (!function_exists('redirect')) {
     function redirect(string $path): \Nyholm\Psr7\Response
     {

@@ -82,6 +82,11 @@ final class SettingsController
 
         $body = (array) ($request->getParsedBody() ?? []);
 
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            flash('flash', __('error.auth_failed'));
+            return redirect('/settings');
+        }
+
         $lastfmUsername = trim((string) ($body['lastfm_username'] ?? ''));
         $dayOfWeek = (int) ($body['day_of_week'] ?? 0);
         $hour = trim((string) ($body['hour'] ?? ''));

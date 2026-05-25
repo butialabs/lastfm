@@ -59,6 +59,7 @@ $protocol = flash('flash_protocol');
         <?php endif; ?>
         <form method="post" action="/auth/bluesky">
             <div>
+                <?= csrf_field() ?>
                 <input type="hidden" name="protocol" value="at">
                 <div class="form-row">
                     <input name="instance" placeholder="<?= htmlspecialchars(__('placeholder_instance_atproto'), ENT_QUOTES) ?>" value="https://bsky.social" required />

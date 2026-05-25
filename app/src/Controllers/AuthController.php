@@ -69,6 +69,12 @@ final class AuthController
         session_start_safe();
         $body = (array) ($request->getParsedBody() ?? []);
 
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            flash('flash', __('error.auth_failed'));
+            flash('flash_protocol', 'at');
+            return redirect('/');
+        }
+
         $instance = trim((string) ($body['instance'] ?? ''));
         $username = trim((string) ($body['username'] ?? ''));
         $password = (string) ($body['password'] ?? '');
@@ -92,6 +98,7 @@ final class AuthController
                 preferredLanguage: $preferredLanguage,
             );
 
+            session_regenerate_id(true);
             session_set('user_id', $userId);
             $res = redirect('/settings');
             return $res->withHeader('Set-Cookie', $this->i18n->makeLocaleCookieHeader($preferredLanguage));
@@ -185,6 +192,7 @@ final class AuthController
                 preferredLanguage: $preferredLanguage,
             );
 
+            session_regenerate_id(true);
             session_set('user_id', $userId);
             $res = redirect('/settings');
             return $res->withHeader('Set-Cookie', $this->i18n->makeLocaleCookieHeader($preferredLanguage));
@@ -207,6 +215,10 @@ final class AuthController
     public function logout(ServerRequestInterface $request): ResponseInterface
     {
         session_start_safe();
+        $body = (array) ($request->getParsedBody() ?? []);
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            return redirect('/');
+        }
         session_destroy_safe();
         flash('flash', __('auth.logged_out'));
         return redirect('/');
@@ -218,6 +230,11 @@ final class AuthController
         $userId = session_get('user_id');
         if (!is_int($userId)) {
             return redirect('/');
+        }
+
+        $body = (array) ($request->getParsedBody() ?? []);
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            return redirect('/settings');
         }
 
         $user = $this->users->findById($userId);

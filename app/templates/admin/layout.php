@@ -14,6 +14,7 @@ $title = htmlspecialchars(__('app.title'), ENT_QUOTES);
 	<script src="//cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 	<script src="//cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.min.js"></script>
 	<link rel="shortcut icon" href="/dist/images/meta/favicon.ico">
+	<meta name="csrf-token" content="<?= htmlspecialchars(csrf_token(), ENT_QUOTES) ?>">
 </head>
 
 <body>
@@ -51,6 +52,7 @@ $title = htmlspecialchars(__('app.title'), ENT_QUOTES);
 					</li>
 				</ul>
 				<form method="post" action="/admin/logout" class="d-flex">
+					<?= csrf_field() ?>
 					<button type="submit"
 						class="btn btn-outline-light btn-sm"><?= htmlspecialchars(__('admin.logout'), ENT_QUOTES) ?></button>
 				</form>

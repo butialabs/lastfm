@@ -16,6 +16,7 @@
 					<?php endif; ?>
 					
 					<form method="post" action="/admin/login">
+						<?= csrf_field() ?>
 						<div class="mb-3">
 							<label for="username" class="form-label"><?= htmlspecialchars(__('admin.username'), ENT_QUOTES) ?></label>
 							<input type="text" class="form-control" id="username" name="username" required autofocus>
