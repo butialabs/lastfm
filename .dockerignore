@@ -1,0 +1,10 @@
+app/vendor/
+app/node_modules/
+app/data/
+app/.env
+app/.php_cs.cache
+app/.php-cs-fixer.cache
+browser/
+.git/
+.github/
+*.md

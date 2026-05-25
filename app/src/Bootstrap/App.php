@@ -72,7 +72,6 @@ final class App
                 'timeout' => 25,
                 'connect_timeout' => 15,
                 'http_errors' => false,
-                'verify' => false,
                 'headers' => [
                     'User-Agent' => 'LastFM.blue/1.0',
                 ],
