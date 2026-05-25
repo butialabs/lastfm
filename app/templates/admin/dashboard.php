@@ -386,7 +386,8 @@
 				return dayNames[parseInt(value)] || value;
 			}
 			if (key === 'social_montage' && value) {
-				return '<a href="' + value + '" target="_blank">' + value + '</a>';
+				const escapedVal = escapeHtml(String(value));
+				return '<a href="' + escapedVal + '" target="_blank">' + escapedVal + '</a>';
 			}
 			if (key === 'status') {
 				const statusClasses = {
