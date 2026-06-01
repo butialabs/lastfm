@@ -109,6 +109,7 @@ return [
     'admin.status.error' => 'Erro',
     'admin.language.english' => 'Inglês',
     'admin.language.portuguese' => 'Português (BR)',
+    'admin.language.french' => 'Francês (FR)',
     'admin.table.actions' => 'Ações',
     'admin.table.view_user' => 'Ver detalhes do usuário',
     'admin.modal.user_details' => 'Detalhes do Usuário',

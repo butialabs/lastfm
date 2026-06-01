@@ -46,7 +46,7 @@ final class AuthController
         $body = (array) ($request->getParsedBody() ?? []);
 
         $locale = (string) ($body['locale'] ?? 'en');
-        $locale = in_array($locale, ['en', 'pt-BR'], true) ? $locale : 'en';
+        $locale = in_array($locale, ['en', 'pt-BR', 'fr-FR'], true) ? $locale : 'en';
 
         $cookie = $this->i18n->makeLocaleCookieHeader($locale);
 

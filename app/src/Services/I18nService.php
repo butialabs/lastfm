@@ -19,11 +19,14 @@ final class I18nService
     public function resolveLocaleFromRequestOrCookie(ServerRequestInterface $request): string
     {
         $cookie = $request->getCookieParams()['locale'] ?? null;
-        if (is_string($cookie) && in_array($cookie, ['en', 'pt-BR'], true)) {
+        if (is_string($cookie) && in_array($cookie, ['en', 'pt-BR', 'fr-FR'], true)) {
             return $cookie;
         }
 
         $accept = strtolower($request->getHeaderLine('Accept-Language'));
+        if (str_starts_with($accept, 'fr')) {
+            return 'fr-FR';
+        }
         return str_starts_with($accept, 'pt') ? 'pt-BR' : 'en';
     }
 

@@ -106,6 +106,8 @@
 						<?= htmlspecialchars(__('admin.language.english'), ENT_QUOTES) ?></option>
 					<option value="pt-BR" <?= ($filters['language'] ?? '') === 'pt-BR' ? 'selected' : '' ?>>
 						<?= htmlspecialchars(__('admin.language.portuguese'), ENT_QUOTES) ?></option>
+					<option value="fr-FR" <?= ($filters['language'] ?? '') === 'fr-FR' ? 'selected' : '' ?>>
+						<?= htmlspecialchars(__('admin.language.french'), ENT_QUOTES) ?></option>
 				</select>
 			</div>
 			<div class="col-md-1">
