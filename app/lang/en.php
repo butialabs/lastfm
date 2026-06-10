@@ -205,6 +205,14 @@ return [
     'admin.pagination.previous' => 'Previous',
     'admin.pagination.next' => 'Next',
 
+    // Config
+    'admin.config.title' => 'Analytics',
+    'admin.config.saved' => 'Settings saved successfully.',
+    'admin.config.analytics_script' => 'Analytics Script',
+    'admin.config.analytics_script_help' => 'Paste your tracking code here (e.g. Google Analytics, Plausible, Matomo). The content will be injected into the <code>&lt;head&gt;</code> of all public pages.',
+    'admin.config.placeholder' => '<!-- paste your analytics script here -->',
+    'admin.config.save' => 'Save',
+
     // User bulk actions
     'admin.table.force_send' => 'Force send',
     'admin.users.reset_errors' => 'Reset error users',

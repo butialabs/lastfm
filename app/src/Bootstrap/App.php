@@ -103,9 +103,19 @@ final class App
             $userRepo = $container->get(UserRepository::class);
             $totalUsers = $userRepo->countTotalUsers();
 
+            $analyticsScript = '';
+            try {
+                $pdo = $container->get(ConnectionFactory::class)->pdo();
+                $stmt = $pdo->query("SELECT value FROM config WHERE key = 'analytics_script' LIMIT 1");
+                $row = $stmt ? $stmt->fetch(\PDO::FETCH_ASSOC) : false;
+                $analyticsScript = is_array($row) ? (string) ($row['value'] ?? '') : '';
+            } catch (\Throwable) {
+            }
+
             $engine->addData([
                 'appUrl' => ($_ENV['APP_URL'] ?? ''),
                 'totalUsers' => $totalUsers,
+                'analyticsScript' => $analyticsScript,
             ]);
             return $engine;
         });
@@ -193,6 +203,8 @@ final class App
         $router->map('GET', '/admin/user/{id:\d+}', [AdminController::class, 'showUser']);
         $router->map('POST', '/admin/user/{id:\d+}/force-send', [AdminController::class, 'forceSendUser']);
         $router->map('POST', '/admin/users/reset-errors', [AdminController::class, 'resetErrorUsers']);
+        $router->map('GET', '/admin/config', [AdminController::class, 'showConfig']);
+        $router->map('POST', '/admin/config', [AdminController::class, 'saveConfig']);
         
         $router->map('GET', '/admin/artists', [ArtistController::class, 'index']);
         $router->map('GET', '/admin/artists/statistics', [ArtistController::class, 'statistics']);

@@ -249,6 +249,54 @@ final class AdminController
         return redirect('/admin/login');
     }
 
+    public function showConfig(ServerRequestInterface $request): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return redirect('/admin/login');
+        }
+
+        $config = [];
+        try {
+            $stmt = $this->pdo->query('SELECT key, value FROM config');
+            foreach ($stmt->fetchAll() as $row) {
+                $config[$row['key']] = $row['value'];
+            }
+        } catch (\Throwable) {
+        }
+
+        $html = $this->views->render('admin/config', [
+            'config' => $config,
+            'success' => flash('config_success') !== null,
+        ]);
+
+        return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);
+    }
+
+    public function saveConfig(ServerRequestInterface $request): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return redirect('/admin/login');
+        }
+
+        $body = (array) ($request->getParsedBody() ?? []);
+
+        if (!csrf_verify((string) ($body['_csrf'] ?? ''))) {
+            return redirect('/admin/config');
+        }
+
+        $analyticsScript = (string) ($body['analytics_script'] ?? '');
+
+        $this->pdo->prepare(
+            "INSERT INTO config (key, value) VALUES (:key, :value)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+        )->execute([':key' => 'analytics_script', ':value' => $analyticsScript]);
+
+        flash('config_success', 'saved');
+        return redirect('/admin/config');
+    }
+
     private function isAuthenticated(): bool
     {
         return session_get('admin_authenticated') === true;

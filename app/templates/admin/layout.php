@@ -50,6 +50,13 @@ $title = htmlspecialchars(__('app.title'), ENT_QUOTES);
 							<?= htmlspecialchars(__('admin.artists.statistics_title'), ENT_QUOTES) ?>
 						</a>
 					</li>
+					<li class="nav-item">
+						<a class="nav-link <?= strpos($_SERVER['REQUEST_URI'], '/admin/config') === 0 ? 'active' : '' ?>"
+							href="/admin/config">
+							<i class="bi bi-gear-fill"></i>
+							<?= htmlspecialchars(__('admin.config.title'), ENT_QUOTES) ?>
+						</a>
+					</li>
 				</ul>
 				<form method="post" action="/admin/logout" class="d-flex">
 					<?= csrf_field() ?>
