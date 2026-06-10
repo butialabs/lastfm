@@ -43,7 +43,7 @@ final class SettingsController
         $user = $this->users->findById($userId) ?? $user;
 
         $locale = (string) ($user['language'] ?? 'en');
-        if (!in_array($locale, ['en', 'pt-BR'], true)) {
+        if (!in_array($locale, ['en', 'pt-BR', 'fr-FR'], true)) {
             $locale = 'en';
         }
         $_COOKIE['locale'] = $locale;

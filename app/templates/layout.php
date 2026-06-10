@@ -85,6 +85,7 @@ $descriptionHtml = str_replace(
 						<option disabled><?= htmlspecialchars(__('app.language'), ENT_QUOTES) ?></option>
 						<option value="en" <?= $currentLocale === 'en' ? 'selected' : '' ?>>English</option>
 						<option value="pt-BR" <?= $currentLocale === 'pt-BR' ? 'selected' : '' ?>>Português (Brasil)</option>
+						<option value="fr-FR" <?= $currentLocale === 'fr-FR' ? 'selected' : '' ?>>Français (France)</option>
 					</select>
 				</form>
 			</footer>
