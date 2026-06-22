@@ -52,29 +52,23 @@ docker compose up -d
 | `ADMIN_USER` | Admin panel username | Yes |
 | `ADMIN_PASSWORD` | Admin panel password | Yes |
 | `TZ` | Timezone (e.g., `America/Sao_Paulo`) | No |
-| `LASTFM_PROXY_LIST` | Inline proxy list used as fallback when Last.fm blocks direct scraping. Comma- or newline-separated. Each entry: `host:port`, `host:port:user:pass`, or a full URL like `http://user:pass@host:port` | No |
-| `LASTFM_PROXY_LIST_URL` | URL that returns a newline-separated proxy list (e.g. Webshare download link). Fetched list is cached on disk | No |
-| `LASTFM_PROXY_PROTOCOL` | Protocol used when formatting `host:port[:user:pass]` entries. Default: `http` (accepts `http`, `https`, `socks5`, etc.) | No |
-| `LASTFM_PROXY_LIST_TTL` | How long (in seconds) the remote proxy list is cached before being refreshed. Default: `86400` (24h) | No |
-| `LASTFM_FETCH_JITTER_MIN_MS` / `LASTFM_FETCH_JITTER_MAX_MS` | Optional random delay (in ms) applied before each Last.fm page request. Defaults to `0` (no jitter) | No |
+| `LASTFM_PROXY_URL` | Single proxy used as fallback for **all** Last.fm calls. Full URL with optional credentials, e.g. `http://user:pass@host:port`. Leave empty to disable the fallback | No |
 
-#### Artist image scraping
+#### Proxy fallback
 
-In 2019, Last.fm removed the image API, so artist images have to be scraped from the public artist page. Under heavy traffic Last.fm will block requests (`403`/`429`). The service uses a simple two-stage Guzzle-based fallback:
+In 2019, Last.fm removed the image API, so artist images have to be scraped from the public artist page. Under heavy traffic Last.fm will block requests (`403`/`429`). The service uses a simple two-stage fallback:
 
-- The direct request rotates User-Agents, sets the full set of browser headers (`Sec-Fetch-*`, `Sec-Ch-Ua-*`, `Accept-Language`, etc.) and a randomised `Referer` to reduce bot-detection hits.
-- If the direct request fails (connection error, `403`, `429`, `5xx`…) and at least one proxy is configured via `LASTFM_PROXY_LIST` and/or `LASTFM_PROXY_LIST_URL`, the request is retried through a random proxy from the pool.
-- The remote proxy list is cached on disk and refreshed every 24h (configurable via `LASTFM_PROXY_LIST_TTL`). Inline and remote lists are merged and deduplicated.
+**Direct (1 attempt) → Proxy (2 attempts).**
+
+- The direct attempt rotates User-Agents and sets full browser headers (`Sec-Fetch-*`, `Sec-Ch-Ua-*`, `Accept-Language`, randomised `Referer`) to reduce bot-detection hits.
+- If it fails (connection error, `403`, `429`, `5xx`…) and `LASTFM_PROXY_URL` is set, the request is retried up to twice through that single proxy.
+- If `LASTFM_PROXY_URL` is empty, only the direct attempt runs (no retry).
 
 Example:
 
 ```env
-LASTFM_PROXY_LIST_URL=https://your-proxy-list
-LASTFM_PROXY_PROTOCOL=http
-LASTFM_PROXY_LIST_TTL=86400
+LASTFM_PROXY_URL=http://user:pass@host:port
 ```
-
-Proxy list entries accept the formats: `host:port`, `host:port:user:pass`, or a full URL like `http://user:pass@host:port`.
 
 ### Persistent Data
 
