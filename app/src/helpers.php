@@ -19,11 +19,17 @@ if (!function_exists('__')) {
         $candidate = $locale ?? ($_COOKIE['locale'] ?? null);
 
         if ($candidate === null) {
-            $accept = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-            $candidate = str_starts_with(strtolower($accept), 'pt') ? 'pt-BR' : 'en';
+            $accept = strtolower($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '');
+            if (str_starts_with($accept, 'pt')) {
+                $candidate = 'pt-BR';
+            } elseif (str_starts_with($accept, 'fr')) {
+                $candidate = 'fr-FR';
+            } else {
+                $candidate = 'en';
+            }
         }
 
-        if (!in_array($candidate, ['en', 'pt-BR'], true)) {
+        if (!in_array($candidate, ['en', 'pt-BR', 'fr-FR'], true)) {
             $candidate = 'en';
         }
 

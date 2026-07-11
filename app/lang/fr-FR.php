@@ -220,6 +220,14 @@ return [
     'admin.pagination.previous' => 'Précédent',
     'admin.pagination.next' => 'Suivant',
 
+    // Config
+    'admin.config.title' => 'Analytics',
+    'admin.config.saved' => 'Paramètres enregistrés avec succès.',
+    'admin.config.analytics_script' => 'Script d\'analytics',
+    'admin.config.analytics_script_help' => 'Collez votre code de suivi ici (ex. Google Analytics, Plausible, Matomo). Le contenu sera injecté dans le <code>&lt;head&gt;</code> de toutes les pages publiques.',
+    'admin.config.placeholder' => '<!-- collez votre script d\'analytics ici -->',
+    'admin.config.save' => 'Enregistrer',
+
     // User bulk actions
     'admin.table.force_send' => 'Forcer l\'envoi',
     'admin.users.reset_errors' => 'Réinitialiser les utilisateurs en erreur',
