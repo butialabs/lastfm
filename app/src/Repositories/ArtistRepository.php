@@ -136,12 +136,16 @@ final class ArtistRepository
             $params[':search'] = '%' . $filters['search'] . '%';
         }
         
-        if (isset($filters['no_image']) && $filters['no_image'] === '1') {
-            $where[] = '(image_hash IS NULL OR image_hash = "")';
+        if (isset($filters['no_image']) && $filters['no_image'] !== '') {
+            if ($filters['no_image'] === '1') {
+                $where[] = '(image_hash IS NULL OR image_hash = "")';
+            } elseif ($filters['no_image'] === 'placeholder') {
+                $where[] = "image_hash = '_placeholder'";
+            }
         }
-        
+
         $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        
+
         $sql = "SELECT * FROM artists $whereClause ORDER BY name ASC LIMIT :limit OFFSET :offset";
         $stmt = $this->pdo->prepare($sql);
         
@@ -172,12 +176,16 @@ final class ArtistRepository
             $params[':search'] = '%' . $filters['search'] . '%';
         }
         
-        if (isset($filters['no_image']) && $filters['no_image'] === '1') {
-            $where[] = '(image_hash IS NULL OR image_hash = "")';
+        if (isset($filters['no_image']) && $filters['no_image'] !== '') {
+            if ($filters['no_image'] === '1') {
+                $where[] = '(image_hash IS NULL OR image_hash = "")';
+            } elseif ($filters['no_image'] === 'placeholder') {
+                $where[] = "image_hash = '_placeholder'";
+            }
         }
-        
+
         $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        
+
         $sql = "SELECT COUNT(*) FROM artists $whereClause";
         $stmt = $this->pdo->prepare($sql);
         
@@ -187,6 +195,30 @@ final class ArtistRepository
         
         $stmt->execute();
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Update image_hash for all artists matching the old hash.
+     *
+     * @param string $oldHash The current image_hash value to match
+     * @param string $newHash The new image_hash value to set
+     * @return int Number of affected rows
+     */
+    public function updateImageHash(string $oldHash, string $newHash): int
+    {
+        $stmt = $this->pdo->prepare('
+            UPDATE artists
+            SET image_hash = :new_hash, updated_at = :updated_at
+            WHERE image_hash = :old_hash
+        ');
+
+        $stmt->execute([
+            ':new_hash' => $newHash,
+            ':old_hash' => $oldHash,
+            ':updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $stmt->rowCount();
     }
 
     /**

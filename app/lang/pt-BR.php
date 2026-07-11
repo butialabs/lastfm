@@ -90,6 +90,7 @@ return [
     'admin.filter.all' => 'Todos',
     'admin.filter.image' => 'Imagem',
     'admin.filter.no_image' => 'Sem Imagem',
+    'admin.filter.placeholder' => 'Placeholder',
     'admin.table.id' => 'ID',
     'admin.table.username' => 'Usuário',
     'admin.table.lastfm' => 'Last.fm',

@@ -37,6 +37,11 @@ $climate->arguments->add([
         'description' => 'Download missing artist images',
         'noValue' => true,
     ],
+    'fix-placeholder' => [
+        'longPrefix' => 'fix-placeholder',
+        'description' => 'Fix placeholder images in cache',
+        'noValue' => true,
+    ],
     'force' => [
         'prefix' => 'f',
         'longPrefix' => 'force',
@@ -73,6 +78,7 @@ $command = $climate->arguments->get('command');
 $isSchedule = $climate->arguments->get('schedule');
 $isSend = $climate->arguments->get('send');
 $isDownload = $climate->arguments->get('download');
+$isFixPlaceholder = $climate->arguments->get('fix-placeholder');
 $isForce = $climate->arguments->get('force');
 $userId = $climate->arguments->get('id');
 
@@ -102,6 +108,18 @@ try {
             $result['total'],
             $result['success'],
             $result['failed']
+        ));
+        exit(0);
+    }
+
+    // php bin/lastfm image --fix-placeholder
+    if ($command === 'image' && $isFixPlaceholder) {
+        $climate->info('Fixing placeholder images in cache...');
+        $result = $container->get(ArtistImageProcessor::class)->fixPlaceholder();
+        $climate->green(sprintf(
+            'Placeholder fix finished. Scanned: %d, Replaced: %d',
+            $result['scanned'],
+            $result['replaced']
         ));
         exit(0);
     }
@@ -142,6 +160,7 @@ try {
     $climate->tab()->out('php bin/lastfm users --schedule    Process scheduled users');
     $climate->tab()->out('php bin/lastfm users --send        Send queued messages');
     $climate->tab()->out('php bin/lastfm image --download    Download images for artists without one');
+    $climate->tab()->out('php bin/lastfm image --fix-placeholder  Replace Last.fm placeholder duplicates in cache');
     $climate->tab()->out('php bin/lastfm send --force --id=<user_id>  Force send for specific user');
     $climate->br();
     $climate->usage();

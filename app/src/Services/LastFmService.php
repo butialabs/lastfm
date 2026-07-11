@@ -12,7 +12,12 @@ use Throwable;
 
 final class LastFmService
 {
+    private const PLACEHOLDER_LASTFM_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
+    private const PLACEHOLDER_LASTFM_MD5 = '86de200d58c75a36aa455dd93052ab4e';
+    public const PLACEHOLDER_HASH = '_placeholder';
+
     private string $cacheDir;
+    private string $basePath;
     private Guzzle $http;
     private LoggerInterface $logger;
     private ArtistRepository $artistRepository;
@@ -26,6 +31,7 @@ final class LastFmService
         $this->http = $http;
         $this->logger = $logger;
         $this->artistRepository = $artistRepository;
+        $this->basePath = $basePath;
         $this->cacheDir = $basePath . '/data/cache/artists';
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0775, true);
@@ -42,7 +48,9 @@ final class LastFmService
     }
 
     /**
-     * Standardised GET against Last.fm: Direct (1x) -> Proxy (2x).
+     * Standardised GET against Last.fm.
+     * If proxy is configured: Proxy (2x attempts), no direct.
+     * If proxy is not configured: Direct (1x attempt).
      * Returns the first response satisfying $isSuccess, or null.
      *
      * @param array<string,mixed> $options
@@ -53,11 +61,7 @@ final class LastFmService
     {
         $proxy = $this->proxyUrl();
 
-        $steps = [null];
-        if ($proxy !== null) {
-            $steps[] = $proxy;
-            $steps[] = $proxy;
-        }
+        $steps = $proxy !== null ? [$proxy, $proxy] : [null];
 
         foreach ($steps as $p) {
             $opts = $options;
@@ -92,6 +96,75 @@ final class LastFmService
         }
 
         return null;
+    }
+
+    /**
+     * Path to the static placeholder image served when Last.fm returns its default image.
+     */
+    private function placeholderPath(): string
+    {
+        return $this->basePath . '/public/dist/images/placeholder.jpg';
+    }
+
+    /**
+     * Check if an og:image URL points to Last.fm's default placeholder.
+     */
+    private function isPlaceholderImageUrl(string $url): bool
+    {
+        return str_contains($url, self::PLACEHOLDER_LASTFM_HASH);
+    }
+
+    /**
+     * Check if a downloaded binary matches Last.fm's default placeholder by MD5.
+     */
+    private function isPlaceholderBinary(string $bin): bool
+    {
+        return md5($bin) === self::PLACEHOLDER_LASTFM_MD5;
+    }
+
+    /**
+     * Scan the cache directory for files that match Last.fm's default placeholder
+     * and replace them with the placeholder hash in the database, deleting the duplicates.
+     *
+     * @return array{scanned:int, replaced:int}
+     */
+    public function fixPlaceholderImages(): array
+    {
+        $placeholderPath = $this->placeholderPath();
+        if (!is_file($placeholderPath)) {
+            $this->logger->warning('Placeholder file not found, cannot fix', ['path' => $placeholderPath]);
+            return ['scanned' => 0, 'replaced' => 0];
+        }
+
+        $scanned = 0;
+        $replaced = 0;
+
+        $files = glob($this->cacheDir . '/*.jpg') ?: [];
+        foreach ($files as $file) {
+            if (basename($file) === self::PLACEHOLDER_HASH . '.jpg') {
+                continue;
+            }
+
+            $scanned++;
+
+            if (md5_file($file) !== self::PLACEHOLDER_LASTFM_MD5) {
+                continue;
+            }
+
+            $hash = basename($file, '.jpg');
+            $updated = $this->artistRepository->updateImageHash($hash, self::PLACEHOLDER_HASH);
+
+            if ($updated > 0) {
+                unlink($file);
+                $replaced += $updated;
+                $this->logger->info('Replaced placeholder duplicate', [
+                    'hash' => $hash,
+                    'updated' => $updated,
+                ]);
+            }
+        }
+
+        return ['scanned' => $scanned, 'replaced' => $replaced];
     }
 
     public function validateUser(string $username): bool
@@ -207,6 +280,11 @@ final class LastFmService
             ? $artist['image_hash']
             : md5(strtolower(trim((string) $artist['name'])));
 
+        if ($hash === self::PLACEHOLDER_HASH) {
+            $placeholderPath = $this->placeholderPath();
+            return is_file($placeholderPath) ? $placeholderPath : null;
+        }
+
         $path = $this->cacheDir . '/' . $hash . '.jpg';
 
         if (!is_file($path)) {
@@ -237,18 +315,16 @@ final class LastFmService
             'proxyFallback' => $this->proxyUrl() !== null ? 'available' : 'disabled',
         ]);
 
-        $hash = !empty($artist['image_hash'])
-            ? $artist['image_hash']
-            : md5(strtolower(trim((string) $artist['name'])));
-        $path = $this->cacheDir . '/' . $hash . '.jpg';
+        $artistHash = md5(strtolower(trim((string) $artist['name'])));
+        $path = $this->cacheDir . '/' . $artistHash . '.jpg';
 
-        if (is_file($path)) {
+        if ($artist['image_hash'] !== self::PLACEHOLDER_HASH && is_file($path)) {
             unlink($path);
         }
 
         $result = $this->fetchAndSaveFromLastFm($artist['name'], $path);
 
-        if ($result === '' || !is_file($path)) {
+        if ($result === '') {
             $this->logger->warning('Force Download failed', [
                 'artistId' => $artistId,
                 'artist' => $artist['name'],
@@ -256,14 +332,18 @@ final class LastFmService
             return false;
         }
 
-        if (empty($artist['image_hash'])) {
-            $this->artistRepository->update($artistId, ['image_hash' => $hash]);
+        $isPlaceholder = ($result === $this->placeholderPath());
+        $hashToStore = $isPlaceholder ? self::PLACEHOLDER_HASH : $artistHash;
+
+        if ($artist['image_hash'] !== $hashToStore) {
+            $this->artistRepository->update($artistId, ['image_hash' => $hashToStore]);
         }
 
         $this->logger->info('Force Download succeeded', [
             'artistId' => $artistId,
             'artist' => $artist['name'],
-            'path' => $path,
+            'path' => $result,
+            'isPlaceholder' => $isPlaceholder,
         ]);
 
         return true;
@@ -272,22 +352,29 @@ final class LastFmService
     public function getArtistImagePath(string $artistName, ?string $imageUrl = null, ?string $mbid = null): string
     {
         $artist = $this->artistRepository->findByName($artistName);
+        $artistHash = md5(strtolower(trim($artistName)));
 
         if ($artist && !empty($artist['image_hash'])) {
             $hash = $artist['image_hash'];
-            $path = $this->cacheDir . '/' . $hash . '.jpg';
 
-            if (is_file($path)) {
-                return $path;
+            if ($hash === self::PLACEHOLDER_HASH) {
+                $placeholderPath = $this->placeholderPath();
+                if (is_file($placeholderPath)) {
+                    return $placeholderPath;
+                }
+            } else {
+                $path = $this->cacheDir . '/' . $hash . '.jpg';
+                if (is_file($path)) {
+                    return $path;
+                }
             }
         } else {
-            $hash = md5(strtolower(trim($artistName)));
-            $path = $this->cacheDir . '/' . $hash . '.jpg';
+            $path = $this->cacheDir . '/' . $artistHash . '.jpg';
 
             if (is_file($path)) {
                 if ($artist) {
                     $this->artistRepository->update((int)$artist['id'], [
-                        'image_hash' => $hash
+                        'image_hash' => $artistHash
                     ]);
                 }
                 return $path;
@@ -304,14 +391,18 @@ final class LastFmService
                 'image_hash' => null,
             ]);
 
-            $artist = ['id' => $artistId];
+            $artist = ['id' => $artistId, 'image_hash' => null];
         }
 
-        $result = $this->fetchAndSaveFromLastFm($artistName, $path);
+        $downloadPath = $this->cacheDir . '/' . $artistHash . '.jpg';
+        $result = $this->fetchAndSaveFromLastFm($artistName, $downloadPath);
         if ($result !== '') {
-            if (empty($artist['image_hash'])) {
+            $isPlaceholder = ($result === $this->placeholderPath());
+            $hashToStore = $isPlaceholder ? self::PLACEHOLDER_HASH : $artistHash;
+
+            if (empty($artist['image_hash']) || $artist['image_hash'] !== $hashToStore) {
                 $this->artistRepository->update((int)$artist['id'], [
-                    'image_hash' => $hash
+                    'image_hash' => $hashToStore
                 ]);
             }
             return $result;
@@ -335,52 +426,71 @@ final class LastFmService
         }
 
         $artistName = $artist['name'];
-        $hash = $artist['image_hash'] ?? md5(strtolower(trim($artistName)));
-        $path = $this->cacheDir . '/' . $hash . '.jpg';
+        $artistHash = md5(strtolower(trim($artistName)));
 
-        if (is_file($path)) {
-            unlink($path);
+        if ($artist['image_hash'] !== self::PLACEHOLDER_HASH) {
+            $path = $this->cacheDir . '/' . $artistHash . '.jpg';
+            if (is_file($path)) {
+                unlink($path);
+            }
         }
 
-        try {
-            $res = $this->http->get($imageUrl, [
-                'headers' => ['Accept' => 'image/*'],
-                'timeout' => 15,
-                'connect_timeout' => 5,
+        if ($this->isPlaceholderImageUrl($imageUrl)) {
+            $this->artistRepository->update($artistId, ['image_hash' => self::PLACEHOLDER_HASH]);
+            $this->logger->info('Image URL is Last.fm placeholder, using static placeholder', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
             ]);
+            return true;
+        }
 
-            $code = $res->getStatusCode();
-            if ($code >= 200 && $code < 300) {
-                $bin = (string) $res->getBody();
-                if ($bin !== '') {
-                    file_put_contents($path, $bin);
+        $res = $this->getProxy(
+            $imageUrl,
+            $this->imageBinaryOptions(),
+            static fn(ResponseInterface $r) => $r->getStatusCode() >= 200 && $r->getStatusCode() < 300,
+            'image-url-download',
+            ['artist' => $artistName, 'url' => $imageUrl]
+        );
 
-                    if (empty($artist['image_hash'])) {
-                        $this->artistRepository->update($artistId, [
-                            'image_hash' => $hash
-                        ]);
-                    }
-
-                    $this->logger->info('Downloaded image from URL', [
-                        'artist' => $artistName,
-                        'url' => $imageUrl
-                    ]);
-                    return true;
-                }
-            }
-        } catch (Throwable $e) {
+        if ($res === null) {
             $this->logger->warning('Image URL download failed', [
                 'artist' => $artistName,
                 'url' => $imageUrl,
-                'error' => $e->getMessage()
             ]);
+            return false;
         }
 
-        return false;
+        $bin = (string) $res->getBody();
+        if ($bin === '') {
+            return false;
+        }
+
+        if ($this->isPlaceholderBinary($bin)) {
+            $this->artistRepository->update($artistId, ['image_hash' => self::PLACEHOLDER_HASH]);
+            $this->logger->info('Downloaded image matches Last.fm placeholder, using static placeholder', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
+            ]);
+            return true;
+        }
+
+        $path = $this->cacheDir . '/' . $artistHash . '.jpg';
+        file_put_contents($path, $bin);
+
+        if ($artist['image_hash'] !== $artistHash) {
+            $this->artistRepository->update($artistId, ['image_hash' => $artistHash]);
+        }
+
+        $this->logger->info('Downloaded image from URL', [
+            'artist' => $artistName,
+            'url' => $imageUrl
+        ]);
+        return true;
     }
 
     /**
-     * Fetch and save artist image from Last.fm
+     * Fetch and save artist image from Last.fm.
+     * Returns the saved file path, the placeholder path, or '' on failure.
      */
     private function fetchAndSaveFromLastFm(string $artistName, string $path): string
     {
@@ -390,9 +500,25 @@ final class LastFmService
             return '';
         }
 
+        if ($this->isPlaceholderImageUrl($imageUrl)) {
+            $this->logger->debug('Last.fm returned placeholder image URL', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
+            ]);
+            return $this->placeholderPath();
+        }
+
         $bin = $this->downloadImageBinary($imageUrl, $artistName);
         if ($bin === null || $bin === '') {
             return '';
+        }
+
+        if ($this->isPlaceholderBinary($bin)) {
+            $this->logger->debug('Downloaded image matches Last.fm placeholder binary', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
+            ]);
+            return $this->placeholderPath();
         }
 
         file_put_contents($path, $bin);

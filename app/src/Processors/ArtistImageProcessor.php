@@ -90,6 +90,17 @@ final class ArtistImageProcessor
         return ['total' => $total, 'success' => $success, 'failed' => $failed];
     }
 
+    public function fixPlaceholder(): array
+    {
+        $this->logger->info('Starting placeholder image fix...');
+
+        $result = $this->lastfm->fixPlaceholderImages();
+
+        $this->logger->info('Placeholder fix completed', $result);
+
+        return $result;
+    }
+
     private function sleepJitter(): void
     {
         $micros = random_int(2_000_000, 5_000_000);

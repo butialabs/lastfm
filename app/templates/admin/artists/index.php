@@ -59,6 +59,7 @@
                     <select class="form-select" id="filter_no_image" name="no_image">
                         <option value=""><?= htmlspecialchars(__('admin.filter.all'), ENT_QUOTES) ?></option>
                         <option value="1" <?= ($filters['no_image'] ?? '') == '1' ? 'selected' : '' ?>><?= htmlspecialchars(__('admin.filter.no_image'), ENT_QUOTES) ?></option>
+                        <option value="placeholder" <?= ($filters['no_image'] ?? '') == 'placeholder' ? 'selected' : '' ?>><?= htmlspecialchars(__('admin.filter.placeholder'), ENT_QUOTES) ?></option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -78,8 +79,10 @@
     </div>
 
     <?php $isNoImageFilter = ($filters['no_image'] ?? '') == '1'; ?>
+    <?php $isPlaceholderFilter = ($filters['no_image'] ?? '') == 'placeholder'; ?>
+    <?php $showBulkBar = ($isNoImageFilter || $isPlaceholderFilter) && !empty($artists); ?>
 
-    <?php if ($isNoImageFilter && !empty($artists)): ?>
+    <?php if ($showBulkBar): ?>
         <div class="card mb-4" id="bulkActionBar">
             <div class="card-body d-flex flex-wrap align-items-center gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="bulkSelectAll">
@@ -108,7 +111,7 @@
                     <?php foreach ($artists as $artist): ?>
                         <div class="col">
                             <div class="artist-card-wrapper" data-artist-id="<?= (int) $artist['id'] ?>">
-                                <?php if ($isNoImageFilter): ?>
+                                <?php if ($isNoImageFilter || $isPlaceholderFilter): ?>
                                     <input type="checkbox" class="form-check-input bulk-check" data-artist-id="<?= (int) $artist['id'] ?>" aria-label="Select">
                                 <?php endif; ?>
                                 <div class="card h-100">
@@ -184,7 +187,7 @@
     <?php endif; ?>
 </div>
 
-<?php if ($isNoImageFilter && !empty($artists)): ?>
+<?php if ($showBulkBar): ?>
 <script>
     (function () {
         const selectAllBtn = document.getElementById('bulkSelectAll');
