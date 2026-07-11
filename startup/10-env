@@ -51,6 +51,9 @@ log_info "Setting up environment variables in /app/.env..."
     printf 'ENCRYPTION_KEY=%s\n' "${ENCRYPTION_KEY}"
     printf 'ADMIN_USER=%s\n'     "${ADMIN_USER}"
     printf 'ADMIN_PASSWORD=%s\n' "${ADMIN_PASSWORD}"
+    printf 'THEAUDIODB_API_KEY=%s\n'  "${THEAUDIODB_API_KEY:-}"
+    printf 'FANART_API_KEY=%s\n'      "${FANART_API_KEY:-}"
+    [ -n "${LASTFM_PROXY_URL}" ] && printf 'LASTFM_PROXY_URL=%s\n' "${LASTFM_PROXY_URL}"
 } > /app/.env
 
 log_success "Environment variables set in /app/.env"

@@ -91,8 +91,13 @@
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="bulkClear">
                     <i class="bi bi-x-square"></i> <?= htmlspecialchars(__('admin.artists.bulk_clear'), ENT_QUOTES) ?>
                 </button>
+                <?php if ($isNoImageFilter): ?>
                 <button type="button" class="btn btn-primary btn-sm" id="bulkForceDownload" disabled>
                     <i class="bi bi-arrow-clockwise"></i> <?= htmlspecialchars(__('admin.artists.bulk_force_download'), ENT_QUOTES) ?>
+                </button>
+                <?php endif; ?>
+                <button type="button" class="btn btn-outline-success btn-sm" id="bulkFindImages" disabled>
+                    <i class="bi bi-cloud-download"></i> <?= htmlspecialchars(__('admin.artists.bulk_find_images'), ENT_QUOTES) ?>
                 </button>
                 <button type="button" class="btn btn-outline-danger btn-sm d-none" id="bulkCancel">
                     <i class="bi bi-stop-circle"></i> <?= htmlspecialchars(__('admin.artists.bulk_cancel'), ENT_QUOTES) ?>
@@ -188,11 +193,35 @@
 </div>
 
 <?php if ($showBulkBar): ?>
+<div class="modal fade" id="findImagesWizard" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="wizardTitle"><?= htmlspecialchars(__('admin.artists.find_providers'), ENT_QUOTES) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="wizardBody" style="min-height:300px;"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="wizardPrev">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <button type="button" class="btn btn-outline-warning btn-sm" id="wizardSkip">
+                    <?= htmlspecialchars(__('admin.artists.wizard_skip'), ENT_QUOTES) ?>
+                </button>
+                <button type="button" class="btn btn-primary d-none" id="wizardNext">Next</button>
+                <button type="button" class="btn btn-success d-none" id="wizardClose">
+                    <?= htmlspecialchars(__('admin.artists.wizard_close'), ENT_QUOTES) ?>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
     (function () {
         const selectAllBtn = document.getElementById('bulkSelectAll');
         const clearBtn = document.getElementById('bulkClear');
         const forceBtn = document.getElementById('bulkForceDownload');
+        const findImagesBtn = document.getElementById('bulkFindImages');
         const cancelBtn = document.getElementById('bulkCancel');
         const statusEl = document.getElementById('bulkStatus');
         const checkboxes = Array.from(document.querySelectorAll('.bulk-check'));
@@ -215,7 +244,8 @@
 
         const updateSelectedCount = () => {
             const count = checkboxes.filter(cb => cb.checked).length;
-            forceBtn.disabled = count === 0;
+            if (forceBtn) forceBtn.disabled = count === 0;
+            findImagesBtn.disabled = count === 0;
             statusEl.textContent = count > 0 ? fmt(i18n.selected, count) : '';
         };
 
@@ -265,12 +295,13 @@
         const setProcessingUi = (running) => {
             selectAllBtn.disabled = running;
             clearBtn.disabled = running;
-            forceBtn.disabled = running;
+            if (forceBtn) forceBtn.disabled = running;
+            findImagesBtn.disabled = running;
             cancelBtn.classList.toggle('d-none', !running);
             checkboxes.forEach(cb => { cb.disabled = running; });
         };
 
-        forceBtn.addEventListener('click', async () => {
+        if (forceBtn) forceBtn.addEventListener('click', async () => {
             const selected = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.artistId);
             if (selected.length === 0) {
                 statusEl.textContent = i18n.noneSelected;
@@ -325,12 +356,215 @@
 
             statusEl.textContent = fmt(i18n.done, success, failed);
             setProcessingUi(false);
-            forceBtn.disabled = checkboxes.filter(cb => cb.checked).length === 0;
+            if (forceBtn) forceBtn.disabled = checkboxes.filter(cb => cb.checked).length === 0;
         });
 
         cancelBtn.addEventListener('click', () => {
             cancelRequested = true;
         });
+
+        const wizardI18n = {
+            fetching: <?= json_encode(__('admin.artists.wizard_fetching')) ?>,
+            noSources: <?= json_encode(__('admin.artists.wizard_no_sources')) ?>,
+            reviewTitle: <?= json_encode(__('admin.artists.wizard_review')) ?>,
+            skip: <?= json_encode(__('admin.artists.wizard_skip')) ?>,
+            close: <?= json_encode(__('admin.artists.wizard_close')) ?>,
+            summary: <?= json_encode(__('admin.artists.wizard_summary')) ?>,
+            downloaded: <?= json_encode(__('admin.artists.wizard_downloaded')) ?>,
+            skipped: <?= json_encode(__('admin.artists.wizard_skipped')) ?>,
+            noResults: <?= json_encode(__('admin.artists.wizard_no_results')) ?>,
+        };
+
+        const wizardEl = document.getElementById('findImagesWizard');
+        const wizardModal = wizardEl ? new bootstrap.Modal(wizardEl) : null;
+        const wizardBody = document.getElementById('wizardBody');
+        const wizardTitle = document.getElementById('wizardTitle');
+        const wizardPrev = document.getElementById('wizardPrev');
+        const wizardNext = document.getElementById('wizardNext');
+        const wizardSkipBtn = document.getElementById('wizardSkip');
+        const wizardCloseBtn = document.getElementById('wizardClose');
+
+        let wizardQueue = [];
+        let wizardIndex = 0;
+        let wizardStats = { downloaded: 0, skipped: 0 };
+
+        const downloadFromUrl = async (artistId, imageUrl) => {
+            const response = await fetch('/admin/artists/' + artistId + '/image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ imageUrl: imageUrl })
+            });
+            const data = await response.json().catch(() => ({}));
+            return response.ok && data && data.success === true;
+        };
+
+        const renderWizardArtist = () => {
+            if (wizardIndex >= wizardQueue.length) {
+                renderWizardSummary();
+                return;
+            }
+
+            const item = wizardQueue[wizardIndex];
+            wizardTitle.textContent = fmt(wizardI18n.reviewTitle, wizardIndex + 1, wizardQueue.length) + ' — ' + item.name;
+
+            wizardPrev.disabled = wizardIndex === 0;
+            wizardSkipBtn.classList.remove('d-none');
+            wizardNext.classList.add('d-none');
+
+            let html = '<div class="row g-2">';
+            item.sources.forEach(function(source, idx) {
+                html += '<div class="col-6 col-md-4">';
+                html += '  <div class="card h-100 wizard-pick" data-source-idx="' + idx + '" style="cursor:pointer;">';
+                html += '    <img src="' + source.url + '" class="card-img-top p-2" style="height:160px;object-fit:contain;" loading="lazy" alt="' + source.source + '">';
+                html += '    <div class="card-body p-2 text-center">';
+                html += '      <span class="badge bg-secondary">' + source.source + '</span>';
+                html += '      <span class="badge bg-info ms-1">' + source.type + '</span>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '</div>';
+            });
+            html += '</div>';
+
+            wizardBody.innerHTML = html;
+
+            wizardBody.querySelectorAll('.wizard-pick').forEach(card => {
+                card.addEventListener('click', async function() {
+                    const sourceIdx = parseInt(this.dataset.sourceIdx, 10);
+                    const source = item.sources[sourceIdx];
+                    card.style.opacity = '0.5';
+                    card.style.pointerEvents = 'none';
+
+                    try {
+                        const ok = await downloadFromUrl(item.artistId, source.url);
+                        if (ok) {
+                            wizardStats.downloaded++;
+                            const wrapper = wrapperFor(String(item.artistId));
+                            if (wrapper) {
+                                wrapper.classList.remove('is-processing', 'is-failed');
+                                wrapper.classList.add('is-success');
+                                const img = wrapper.querySelector('img');
+                                if (img) {
+                                    const src = img.getAttribute('src').split('?')[0];
+                                    img.setAttribute('src', src + '?t=' + Date.now());
+                                }
+                            }
+                            wizardIndex++;
+                            renderWizardArtist();
+                        } else {
+                            card.style.opacity = '1';
+                            card.style.pointerEvents = 'auto';
+                            alert('Download failed');
+                        }
+                    } catch(e) {
+                        card.style.opacity = '1';
+                        card.style.pointerEvents = 'auto';
+                        alert(e.message);
+                    }
+                });
+            });
+        };
+
+        const renderWizardSummary = () => {
+            wizardTitle.textContent = wizardI18n.summary;
+            wizardPrev.classList.add('d-none');
+            wizardSkipBtn.classList.add('d-none');
+            wizardNext.classList.add('d-none');
+            wizardCloseBtn.classList.remove('d-none');
+
+            const noResults = wizardStats.downloaded === 0 && wizardStats.skipped === 0;
+            wizardBody.innerHTML = '<div class="text-center py-4">' +
+                (noResults
+                    ? '<p class="text-muted">' + wizardI18n.noResults + '</p>'
+                    : '<p><i class="bi bi-check-circle text-success fs-1"></i></p>' +
+                      '<p>' + wizardI18n.downloaded + ': <strong>' + wizardStats.downloaded + '</strong></p>' +
+                      '<p>' + wizardI18n.skipped + ': <strong>' + wizardStats.skipped + '</strong></p>'
+                ) +
+                '</div>';
+        };
+
+        wizardSkipBtn.addEventListener('click', function() {
+            wizardStats.skipped++;
+            wizardIndex++;
+            renderWizardArtist();
+        });
+
+        wizardPrev.addEventListener('click', function() {
+            if (wizardIndex > 0) {
+                wizardIndex--;
+                renderWizardArtist();
+            }
+        });
+
+        wizardCloseBtn.addEventListener('click', function() {
+            wizardModal.hide();
+        });
+
+        if (findImagesBtn) {
+            findImagesBtn.addEventListener('click', async function() {
+                const selected = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.artistId);
+                if (selected.length === 0) {
+                    statusEl.textContent = i18n.noneSelected;
+                    return;
+                }
+
+                findImagesBtn.disabled = true;
+                findImagesBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+                const queue = [];
+                for (let i = 0; i < selected.length; i++) {
+                    const artistId = selected[i];
+                    const wrapper = wrapperFor(artistId);
+                    if (wrapper) {
+                        wrapper.classList.remove('is-success', 'is-failed');
+                        wrapper.classList.add('is-processing');
+                    }
+                    statusEl.textContent = fmt(wizardI18n.fetching, i + 1, selected.length);
+
+                    try {
+                        const response = await fetch('/admin/artists/' + artistId + '/image-sources', {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        });
+                        const data = await response.json();
+                        if (data.success && data.sources && data.sources.length > 0) {
+                            queue.push({
+                                artistId: parseInt(artistId, 10),
+                                name: data.artist ? data.artist.name : ('#' + artistId),
+                                sources: data.sources
+                            });
+                        }
+                    } catch(e) { /* skip */ }
+
+                    if (wrapper) {
+                        wrapper.classList.remove('is-processing');
+                    }
+                }
+
+                findImagesBtn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + <?= json_encode(__('admin.artists.bulk_find_images')) ?>;
+                findImagesBtn.disabled = false;
+
+                if (queue.length === 0) {
+                    statusEl.textContent = wizardI18n.noSources;
+                    checkboxes.forEach(cb => {
+                        const w = wrapperFor(cb.dataset.artistId);
+                        if (w) w.classList.remove('is-processing');
+                    });
+                    return;
+                }
+
+                wizardQueue = queue;
+                wizardIndex = 0;
+                wizardStats = { downloaded: 0, skipped: 0 };
+                wizardPrev.classList.remove('d-none');
+                wizardSkipBtn.classList.remove('d-none');
+                wizardCloseBtn.classList.add('d-none');
+                wizardNext.classList.add('d-none');
+                wizardModal.show();
+                renderWizardArtist();
+            });
+        }
     })();
 </script>
 <?php endif; ?>

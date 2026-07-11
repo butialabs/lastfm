@@ -18,6 +18,9 @@
                     <button type="button" class="btn btn-outline-primary regenerate-image" data-artist-id="<?= (int) $artist['id'] ?>">
                         <i class="bi bi-arrow-clockwise"></i> <?= htmlspecialchars(__('admin.artists.force_download'), ENT_QUOTES) ?>
                     </button>
+                    <button type="button" class="btn btn-outline-success find-providers" data-artist-id="<?= (int) $artist['id'] ?>">
+                        <i class="bi bi-cloud-download"></i> <?= htmlspecialchars(__('admin.artists.find_providers'), ENT_QUOTES) ?>
+                    </button>
                 </div>
 
                 <h5 class="card-title mt-2"><?= htmlspecialchars($artist['name'], ENT_QUOTES) ?></h5>
@@ -136,6 +139,34 @@
     </div>
 </div>
 
+<div class="modal fade" id="providersModal" tabindex="-1" aria-labelledby="providersModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="providersModalLabel">
+                    <?= htmlspecialchars(__('admin.artists.find_providers'), ENT_QUOTES) ?>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                    aria-label="<?= htmlspecialchars(__('admin.modal.close'), ENT_QUOTES) ?>"></button>
+            </div>
+            <div class="modal-body">
+                <div id="providersLoading" class="text-center py-4 d-none">
+                    <span class="spinner-border spinner-border-lg" role="status"></span>
+                    <p class="mt-2 text-muted"><?= htmlspecialchars(__('admin.artists.loading_sources'), ENT_QUOTES) ?></p>
+                </div>
+                <div id="providersEmpty" class="text-center text-muted py-4 d-none">
+                    <?= htmlspecialchars(__('admin.artists.no_sources'), ENT_QUOTES) ?>
+                </div>
+                <div id="providersGrid" class="row g-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary"
+                    data-bs-dismiss="modal"><?= htmlspecialchars(__('admin.modal.close'), ENT_QUOTES) ?></button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const modal = new bootstrap.Modal(document.getElementById('fetchImageModal'));
@@ -181,6 +212,101 @@
                     button.disabled = false;
                     button.innerHTML = originalHtml;
                 });
+            });
+        });
+
+        const providersModal = new bootstrap.Modal(document.getElementById('providersModal'));
+        const providersLoading = document.getElementById('providersLoading');
+        const providersEmpty = document.getElementById('providersEmpty');
+        const providersGrid = document.getElementById('providersGrid');
+
+        document.querySelectorAll('.find-providers').forEach(button => {
+            button.addEventListener('click', async function() {
+                const artistId = button.dataset.artistId;
+                providersLoading.classList.remove('d-none');
+                providersEmpty.classList.add('d-none');
+                providersGrid.innerHTML = '';
+                providersModal.show();
+
+                try {
+                    const response = await fetch(`/admin/artists/${artistId}/image-sources`, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    const data = await response.json();
+                    providersLoading.classList.add('d-none');
+
+                    if (!data.success || !data.sources || data.sources.length === 0) {
+                        providersEmpty.classList.remove('d-none');
+                        return;
+                    }
+
+                    data.sources.forEach(function(source) {
+                        const col = document.createElement('div');
+                        col.className = 'col-6 col-md-4';
+
+                        const card = document.createElement('div');
+                        card.className = 'card h-100 provider-image-card';
+                        card.style.cursor = 'pointer';
+
+                        const img = document.createElement('img');
+                        img.className = 'card-img-top p-2';
+                        img.src = source.url;
+                        img.style.height = '150px';
+                        img.style.objectFit = 'contain';
+                        img.loading = 'lazy';
+                        img.alt = source.source + ' ' + source.type;
+
+                        const body = document.createElement('div');
+                        body.className = 'card-body p-2 text-center';
+
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-secondary';
+                        badge.textContent = source.source;
+
+                        const typeBadge = document.createElement('span');
+                        typeBadge.className = 'badge bg-info ms-1';
+                        typeBadge.textContent = source.type;
+
+                        body.appendChild(badge);
+                        body.appendChild(typeBadge);
+                        card.appendChild(img);
+                        card.appendChild(body);
+
+                        card.addEventListener('click', async function() {
+                            card.style.opacity = '0.5';
+                            card.style.pointerEvents = 'none';
+                            try {
+                                const saveResponse = await fetch(`/admin/artists/${artistId}/image`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    },
+                                    body: JSON.stringify({ imageUrl: source.url })
+                                });
+                                const saveData = await saveResponse.json();
+                                if (saveData.success) {
+                                    providersModal.hide();
+                                    window.location.reload();
+                                } else {
+                                    alert(saveData.message || 'Error');
+                                    card.style.opacity = '1';
+                                    card.style.pointerEvents = 'auto';
+                                }
+                            } catch(e) {
+                                alert(e.message);
+                                card.style.opacity = '1';
+                                card.style.pointerEvents = 'auto';
+                            }
+                        });
+
+                        col.appendChild(card);
+                        providersGrid.appendChild(col);
+                    });
+                } catch(error) {
+                    providersLoading.classList.add('d-none');
+                    providersEmpty.classList.remove('d-none');
+                }
             });
         });
 

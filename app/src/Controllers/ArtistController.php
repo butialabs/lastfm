@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Repositories\ArtistRepository;
+use App\Services\ImageProviderService;
 use App\Services\LastFmService;
 use League\Plates\Engine;
 use Nyholm\Psr7\Response;
@@ -15,15 +16,18 @@ final class ArtistController
 {
     private ArtistRepository $artistRepository;
     private LastFmService $lastFmService;
+    private ImageProviderService $imageProviderService;
     private Engine $views;
 
     public function __construct(
         ArtistRepository $artistRepository,
         LastFmService $lastFmService,
+        ImageProviderService $imageProviderService,
         Engine $views
     ) {
         $this->artistRepository = $artistRepository;
         $this->lastFmService = $lastFmService;
+        $this->imageProviderService = $imageProviderService;
         $this->views = $views;
     }
 
@@ -273,6 +277,44 @@ final class ArtistController
         return new Response(500, ['Content-Type' => 'application/json'], json_encode([
             'success' => false,
             'message' => 'Failed to regenerate image from default sources'
+        ]));
+    }
+
+    /**
+     * Fetch available image sources from external providers (TheAudioDB, Fanart.tv)
+     */
+    public function imageSources(ServerRequestInterface $request, array $args): ResponseInterface
+    {
+        session_start_safe();
+        if (!$this->isAuthenticated()) {
+            return new Response(401, ['Content-Type' => 'application/json'], json_encode(['error' => 'Unauthorized']));
+        }
+
+        $artistId = (int) ($args['id'] ?? 0);
+        if ($artistId <= 0) {
+            return new Response(400, ['Content-Type' => 'application/json'], json_encode(['error' => 'Invalid artist ID']));
+        }
+
+        $artist = $this->artistRepository->findById($artistId);
+        if (!$artist) {
+            return new Response(404, ['Content-Type' => 'application/json'], json_encode(['error' => 'Artist not found']));
+        }
+
+        $mbid = !empty($artist['musicbrainz_id']) ? $artist['musicbrainz_id'] : null;
+
+        $sources = $this->imageProviderService->fetchImageSources(
+            (string) $artist['name'],
+            $mbid
+        );
+
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode([
+            'success' => true,
+            'artist' => [
+                'id' => (int) $artist['id'],
+                'name' => $artist['name'],
+                'mbid' => $mbid,
+            ],
+            'sources' => $sources,
         ]));
     }
 

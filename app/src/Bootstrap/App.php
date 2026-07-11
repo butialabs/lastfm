@@ -17,6 +17,7 @@ use App\Repositories\ArtistRepository;
 use App\Repositories\UserRepository;
 use App\Services\CryptoService;
 use App\Services\I18nService;
+use App\Services\ImageProviderService;
 use App\Services\LastFmService;
 use App\Services\LoggerFactory;
 use App\Services\MontageService;
@@ -83,6 +84,10 @@ final class App
             ->addArgument(LoggerInterface::class)
             ->addArgument(ArtistRepository::class)
             ->addArgument('basePath');
+
+        $container->add(ImageProviderService::class)
+            ->addArgument(GuzzleClient::class)
+            ->addArgument(LoggerInterface::class);
 
         $container->add(MontageService::class)
             ->addArgument(LoggerInterface::class)
@@ -171,6 +176,7 @@ final class App
         $container->add(ArtistController::class)
             ->addArgument(ArtistRepository::class)
             ->addArgument(LastFmService::class)
+            ->addArgument(ImageProviderService::class)
             ->addArgument(Engine::class);
 
         return $container;
@@ -212,6 +218,7 @@ final class App
         $router->map('GET', '/admin/artists/{id:\d+}/image', [ArtistController::class, 'getImage']);
         $router->map('POST', '/admin/artists/{id:\d+}/image', [ArtistController::class, 'saveImage']);
         $router->map('POST', '/admin/artists/{id:\d+}/regenerate-image', [ArtistController::class, 'regenerateImage']);
+        $router->map('GET', '/admin/artists/{id:\d+}/image-sources', [ArtistController::class, 'imageSources']);
 
         $router->setStrategy((new \League\Route\Strategy\ApplicationStrategy())->setContainer($container));
 
