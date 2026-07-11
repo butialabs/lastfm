@@ -13,7 +13,21 @@ use Throwable;
 final class LastFmService
 {
     private const PLACEHOLDER_LASTFM_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
-    private const PLACEHOLDER_LASTFM_MD5 = '86de200d58c75a36aa455dd93052ab4e';
+
+    private const PLACEHOLDER_LASTFM_MD5 = [
+        '86de200d58c75a36aa455dd93052ab4e', // ar0, _s, _m, _l (3417 bytes)
+        '5fa82c9716bd89010826eb5c31426378', // 300x300 (2086 bytes)
+        '16c89c93f617445e8b5a8359cd623261', // 500x500 (3657 bytes)
+        '7791e4e2a2f69c6cd9cef72b0e407a29', // 770x0 (6389 bytes)
+        'c80d9cdd193cb447895bc9549613ffaa', // 174s (1295 bytes)
+        'c5c111dd6fd24f0bf097fbb118353a69', // 64s (762 bytes)
+        '940cfccb7ab45df27d0672483371e00d', // 34s (653 bytes)
+    ];
+
+    private const PLACEHOLDER_MAX_BYTES = 10000;
+
+    private const PLACEHOLDER_SIMILARITY_THRESHOLD = 5.0;
+
     public const PLACEHOLDER_HASH = '_placeholder';
 
     private string $cacheDir;
@@ -115,11 +129,83 @@ final class LastFmService
     }
 
     /**
-     * Check if a downloaded binary matches Last.fm's default placeholder by MD5.
+     * Check if a downloaded binary matches Last.fm's default placeholder.
+     * Tries known MD5 hashes first, then falls back to GD perceptual
+     * comparison for small files with unknown hashes.
      */
     private function isPlaceholderBinary(string $bin): bool
     {
-        return md5($bin) === self::PLACEHOLDER_LASTFM_MD5;
+        if (in_array(md5($bin), self::PLACEHOLDER_LASTFM_MD5, true)) {
+            return true;
+        }
+
+        if (strlen($bin) > self::PLACEHOLDER_MAX_BYTES) {
+            return false;
+        }
+
+        return $this->binMatchesPlaceholderImage($bin);
+    }
+
+    private function isPlaceholderFile(string $path): bool
+    {
+        $md5 = md5_file($path);
+        if ($md5 !== false && in_array($md5, self::PLACEHOLDER_LASTFM_MD5, true)) {
+            return true;
+        }
+
+        if (filesize($path) > self::PLACEHOLDER_MAX_BYTES) {
+            return false;
+        }
+
+        $bin = @file_get_contents($path);
+        return $bin !== false && $this->binMatchesPlaceholderImage($bin);
+    }
+
+    private function binMatchesPlaceholderImage(string $bin): bool
+    {
+        $placeholderPath = $this->placeholderPath();
+        if (!is_file($placeholderPath)) {
+            return false;
+        }
+
+        $candidate = @imagecreatefromstring($bin);
+        if ($candidate === false) {
+            return false;
+        }
+
+        $reference = @imagecreatefromstring((string) file_get_contents($placeholderPath));
+        if ($reference === false) {
+            return false;
+        }
+
+        $ts = 16;
+        $thumbA = imagecreatetruecolor($ts, $ts);
+        $thumbB = imagecreatetruecolor($ts, $ts);
+        imagecopyresampled($thumbA, $candidate, 0, 0, 0, 0, $ts, $ts, imagesx($candidate), imagesy($candidate));
+        imagecopyresampled($thumbB, $reference, 0, 0, 0, 0, $ts, $ts, imagesx($reference), imagesy($reference));
+
+        $diff = 0;
+        for ($y = 0; $y < $ts; $y++) {
+            for ($x = 0; $x < $ts; $x++) {
+                $ca = imagecolorat($thumbA, $x, $y);
+                $cb = imagecolorat($thumbB, $x, $y);
+                $dr = abs((($ca >> 16) & 0xFF) - (($cb >> 16) & 0xFF));
+                $dg = abs((($ca >> 8) & 0xFF) - (($cb >> 8) & 0xFF));
+                $db = abs(($ca & 0xFF) - ($cb & 0xFF));
+                $diff += ($dr + $dg + $db) / 3;
+            }
+        }
+
+        $avgDiff = $diff / ($ts * $ts);
+
+        if ($avgDiff < self::PLACEHOLDER_SIMILARITY_THRESHOLD) {
+            $this->logger->debug('Image matches placeholder via perceptual comparison', [
+                'avgDiff' => round($avgDiff, 2),
+            ]);
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -147,7 +233,7 @@ final class LastFmService
 
             $scanned++;
 
-            if (md5_file($file) !== self::PLACEHOLDER_LASTFM_MD5) {
+            if (!$this->isPlaceholderFile($file)) {
                 continue;
             }
 

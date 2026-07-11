@@ -10,7 +10,7 @@ use Throwable;
 
 final class ImageProviderService
 {
-    private const THEAUDIODB_FALLBACK_KEY = '2';
+    private const THEAUDIODB_FALLBACK_KEY = '123';
 
     private Guzzle $http;
     private LoggerInterface $logger;
