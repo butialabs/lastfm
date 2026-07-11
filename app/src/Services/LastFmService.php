@@ -12,21 +12,7 @@ use Throwable;
 
 final class LastFmService
 {
-    private const PLACEHOLDER_LASTFM_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
-
-    private const PLACEHOLDER_LASTFM_MD5 = [
-        '86de200d58c75a36aa455dd93052ab4e', // ar0, _s, _m, _l (3417 bytes)
-        '5fa82c9716bd89010826eb5c31426378', // 300x300 (2086 bytes)
-        '16c89c93f617445e8b5a8359cd623261', // 500x500 (3657 bytes)
-        '7791e4e2a2f69c6cd9cef72b0e407a29', // 770x0 (6389 bytes)
-        'c80d9cdd193cb447895bc9549613ffaa', // 174s (1295 bytes)
-        'c5c111dd6fd24f0bf097fbb118353a69', // 64s (762 bytes)
-        '940cfccb7ab45df27d0672483371e00d', // 34s (653 bytes)
-    ];
-
-    private const PLACEHOLDER_MAX_BYTES = 10000;
-
-    private const PLACEHOLDER_SIMILARITY_THRESHOLD = 5.0;
+    private const PLACEHOLDER_MAX_BYTES = 2048; // 2KB
 
     public const PLACEHOLDER_HASH = '_placeholder';
 
@@ -121,107 +107,28 @@ final class LastFmService
     }
 
     /**
-     * Check if an og:image URL points to Last.fm's default placeholder.
-     */
-    private function isPlaceholderImageUrl(string $url): bool
-    {
-        return str_contains($url, self::PLACEHOLDER_LASTFM_HASH);
-    }
-
-    /**
-     * Check if a downloaded binary matches Last.fm's default placeholder.
-     * Tries known MD5 hashes first, then falls back to GD perceptual
-     * comparison for small files with unknown hashes.
+     * Check if a downloaded binary is a placeholder image.
+     * Any image smaller than 2KB is considered a placeholder.
      */
     private function isPlaceholderBinary(string $bin): bool
     {
-        if (in_array(md5($bin), self::PLACEHOLDER_LASTFM_MD5, true)) {
-            return true;
-        }
-
-        if (strlen($bin) > self::PLACEHOLDER_MAX_BYTES) {
-            return false;
-        }
-
-        return $this->binMatchesPlaceholderImage($bin);
+        return strlen($bin) < self::PLACEHOLDER_MAX_BYTES;
     }
 
     private function isPlaceholderFile(string $path): bool
     {
-        $md5 = md5_file($path);
-        if ($md5 !== false && in_array($md5, self::PLACEHOLDER_LASTFM_MD5, true)) {
-            return true;
-        }
-
-        if (filesize($path) > self::PLACEHOLDER_MAX_BYTES) {
-            return false;
-        }
-
-        $bin = @file_get_contents($path);
-        return $bin !== false && $this->binMatchesPlaceholderImage($bin);
-    }
-
-    private function binMatchesPlaceholderImage(string $bin): bool
-    {
-        $placeholderPath = $this->placeholderPath();
-        if (!is_file($placeholderPath)) {
-            return false;
-        }
-
-        $candidate = @imagecreatefromstring($bin);
-        if ($candidate === false) {
-            return false;
-        }
-
-        $reference = @imagecreatefromstring((string) file_get_contents($placeholderPath));
-        if ($reference === false) {
-            return false;
-        }
-
-        $ts = 16;
-        $thumbA = imagecreatetruecolor($ts, $ts);
-        $thumbB = imagecreatetruecolor($ts, $ts);
-        imagecopyresampled($thumbA, $candidate, 0, 0, 0, 0, $ts, $ts, imagesx($candidate), imagesy($candidate));
-        imagecopyresampled($thumbB, $reference, 0, 0, 0, 0, $ts, $ts, imagesx($reference), imagesy($reference));
-
-        $diff = 0;
-        for ($y = 0; $y < $ts; $y++) {
-            for ($x = 0; $x < $ts; $x++) {
-                $ca = imagecolorat($thumbA, $x, $y);
-                $cb = imagecolorat($thumbB, $x, $y);
-                $dr = abs((($ca >> 16) & 0xFF) - (($cb >> 16) & 0xFF));
-                $dg = abs((($ca >> 8) & 0xFF) - (($cb >> 8) & 0xFF));
-                $db = abs(($ca & 0xFF) - ($cb & 0xFF));
-                $diff += ($dr + $dg + $db) / 3;
-            }
-        }
-
-        $avgDiff = $diff / ($ts * $ts);
-
-        if ($avgDiff < self::PLACEHOLDER_SIMILARITY_THRESHOLD) {
-            $this->logger->debug('Image matches placeholder via perceptual comparison', [
-                'avgDiff' => round($avgDiff, 2),
-            ]);
-            return true;
-        }
-
-        return false;
+        $size = filesize($path);
+        return $size !== false && $size < self::PLACEHOLDER_MAX_BYTES;
     }
 
     /**
-     * Scan the cache directory for files that match Last.fm's default placeholder
+     * Scan the cache directory for placeholder images (smaller than 2KB)
      * and replace them with the placeholder hash in the database, deleting the duplicates.
      *
      * @return array{scanned:int, replaced:int}
      */
     public function fixPlaceholderImages(): array
     {
-        $placeholderPath = $this->placeholderPath();
-        if (!is_file($placeholderPath)) {
-            $this->logger->warning('Placeholder file not found, cannot fix', ['path' => $placeholderPath]);
-            return ['scanned' => 0, 'replaced' => 0];
-        }
-
         $scanned = 0;
         $replaced = 0;
 
@@ -521,15 +428,6 @@ final class LastFmService
             }
         }
 
-        if ($this->isPlaceholderImageUrl($imageUrl)) {
-            $this->artistRepository->update($artistId, ['image_hash' => self::PLACEHOLDER_HASH]);
-            $this->logger->info('Image URL is Last.fm placeholder, using static placeholder', [
-                'artist' => $artistName,
-                'url' => $imageUrl,
-            ]);
-            return true;
-        }
-
         $res = $this->getProxy(
             $imageUrl,
             $this->imageBinaryOptions(),
@@ -553,7 +451,7 @@ final class LastFmService
 
         if ($this->isPlaceholderBinary($bin)) {
             $this->artistRepository->update($artistId, ['image_hash' => self::PLACEHOLDER_HASH]);
-            $this->logger->info('Downloaded image matches Last.fm placeholder, using static placeholder', [
+            $this->logger->info('Downloaded image is placeholder (< 2KB)', [
                 'artist' => $artistName,
                 'url' => $imageUrl,
             ]);
@@ -586,21 +484,13 @@ final class LastFmService
             return '';
         }
 
-        if ($this->isPlaceholderImageUrl($imageUrl)) {
-            $this->logger->debug('Last.fm returned placeholder image URL', [
-                'artist' => $artistName,
-                'url' => $imageUrl,
-            ]);
-            return $this->placeholderPath();
-        }
-
         $bin = $this->downloadImageBinary($imageUrl, $artistName);
         if ($bin === null || $bin === '') {
             return '';
         }
 
         if ($this->isPlaceholderBinary($bin)) {
-            $this->logger->debug('Downloaded image matches Last.fm placeholder binary', [
+            $this->logger->debug('Downloaded image is placeholder (< 2KB)', [
                 'artist' => $artistName,
                 'url' => $imageUrl,
             ]);
