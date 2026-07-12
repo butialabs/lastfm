@@ -49,7 +49,7 @@ final class LastFmService
 
     /**
      * Standardised GET against Last.fm.
-     * If proxy is configured: Proxy (2x attempts), no direct.
+     * If proxy is configured: Proxy (2x attempts), then Direct fallback (1x).
      * If proxy is not configured: Direct (1x attempt).
      * Returns the first response satisfying $isSuccess, or null.
      *
@@ -61,7 +61,12 @@ final class LastFmService
     {
         $proxy = $this->proxyUrl();
 
-        $steps = $proxy !== null ? [$proxy, $proxy] : [null];
+        $steps = [];
+        if ($proxy !== null) {
+            $steps[] = $proxy;
+            $steps[] = $proxy;
+        }
+        $steps[] = null;
 
         foreach ($steps as $p) {
             $opts = $options;
@@ -79,6 +84,11 @@ final class LastFmService
             try {
                 $res = $this->http->get($url, $opts);
                 if ($isSuccess($res)) {
+                    $this->logger->debug('Last.fm request succeeded', $logCtx + [
+                        'context' => $context,
+                        'via' => $via,
+                        'status' => $res->getStatusCode(),
+                    ]);
                     return $res;
                 }
                 $this->logger->debug('Last.fm request non-success', $logCtx + [
