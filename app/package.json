@@ -1,7 +1,7 @@
 {
 	"name": "lastfm-blue",
 	"version": "1.0.0",
-	"description": "Lastfm.blue",
+	"description": "Lastfm",
 	"scripts": {
 		"start": "gulp"
 	},

@@ -74,7 +74,7 @@ final class App
                 'connect_timeout' => 15,
                 'http_errors' => false,
                 'headers' => [
-                    'User-Agent' => 'LastFM.blue/1.0',
+                    'User-Agent' => 'LastFM.butialabs.com/1.0',
                 ],
             ]);
         });

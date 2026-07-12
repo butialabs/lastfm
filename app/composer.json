@@ -1,6 +1,6 @@
 {
   "name": "lastfm/lastfm-blue",
-  "description": "LastFM.blue - weekly Last.fm stats autoposter for Bluesky (AT Protocol) and Mastodon",
+  "description": "LastFM - weekly Last.fm stats autoposter for Bluesky (AT Protocol) and Mastodon",
   "type": "project",
   "require": {
     "php": "^8.4",

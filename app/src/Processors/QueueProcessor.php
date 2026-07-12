@@ -137,7 +137,7 @@ final class QueueProcessor
     /** @param array<string,mixed> $user */
     private function buildPostText(array $user, string $language, string $protocol): string
     {
-        $mention = $protocol === 'mastodon' ? '@lfm_blue@mastodon.social' : '@lastfm.blue';
+        $mention = $protocol === 'mastodon' ? '@lfm_blue@mastodon.social' : '@lastfm-butialabs.bsky.social';
         $username = (string) ($user['lastfm_username'] ?? '');
 
         $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
