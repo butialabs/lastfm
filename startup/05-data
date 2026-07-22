@@ -1,25 +1,8 @@
 #!/bin/bash
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log_success() {
-    echo -e "${GREEN}[✓] $1${NC}"
-}
-
-log_info() {
-    echo -e "${YELLOW}[i] $1${NC}"
-}
-
-log_info "Setting up data directories..."
-
-mkdir -p /app/data/montage /app/data/cache /app/data/db /app/data/logs
-
+echo "[i] Setting up data directories..."
+mkdir -p /app/data/montage /app/data/cache/artists /app/data/db /app/data/logs
 chown -R www-data:www-data /app/data
 chmod -R 755 /app/data
-
-log_success "Data directories configured successfully"
+echo "[V] Data directories ready"

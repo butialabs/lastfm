@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+cd /app
+
+echo "[i] Running migrations..."
+php artisan migrate --force
+
+echo "[i] Seeding admin (if needed)..."
+php artisan db:seed --class=AdminSeeder --force
+
+# No-op when there is no legacy database; fails the boot with a clear
+# message if the import cannot proceed (e.g. missing ENCRYPTION_KEY).
+echo "[i] Checking for legacy database to import..."
+php artisan lastfm:import-legacy
+
+echo "[i] Optimizing..."
+php artisan optimize
+
+echo "[V] Application ready"
