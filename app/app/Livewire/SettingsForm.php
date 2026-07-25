@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\Livewire;
 
 use App\Models\User;
-use App\Services\LastFmService;
+use App\Services\LastFm\LastFmApi;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class SettingsForm extends Component
@@ -52,13 +53,13 @@ class SettingsForm extends Component
         $this->flashMessage = null;
     }
 
-    public function save(LastFmService $lastfm)
+    public function save(LastFmApi $lastfm)
     {
         $this->validate([
             'lastfm_username' => ['required', 'string', 'max:255'],
             'day_of_week' => ['required', 'integer', 'between:1,7'],
             'hour' => ['required', 'date_format:H:i'],
-            'timezone' => ['required', 'string', \Illuminate\Validation\Rule::in(\DateTimeZone::listIdentifiers())],
+            'timezone' => ['required', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
         ], [
             'lastfm_username.required' => __('messages.error.missing_fields'),
             'hour.date_format' => __('messages.error.invalid_time'),
@@ -66,7 +67,7 @@ class SettingsForm extends Component
         ]);
 
         try {
-            if (! $lastfm->validateUser($this->lastfm_username)) {
+            if (! $lastfm->userExists($this->lastfm_username)) {
                 $this->addError('lastfm_username', __('messages.error.lastfm_user_not_found'));
 
                 return null;

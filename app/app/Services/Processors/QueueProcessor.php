@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Processors;
 
 use App\Models\User;
-use App\Services\LastFmService;
+use App\Services\LastFm\WeeklyChartService;
 use App\Services\Social\BlueskyClient;
 use App\Services\Social\MastodonClient;
 use Illuminate\Support\Facades\Crypt;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 final class QueueProcessor
 {
     public function __construct(
-        private readonly LastFmService $lastfm,
+        private readonly WeeklyChartService $charts,
         private readonly BlueskyClient $bluesky,
         private readonly MastodonClient $mastodon,
     ) {}
@@ -34,7 +34,7 @@ final class QueueProcessor
     }
 
     /**
-     * Send for a specific user (force mode). User must be QUEUED with a montage ready.
+     * Force mode: the user must already be QUEUED with a montage ready.
      */
     public function sendForUserId(int $userId): bool
     {
@@ -70,17 +70,16 @@ final class QueueProcessor
             $language = (string) ($user->language ?? 'en');
             $montagePath = (string) ($user->social_montage ?? '');
 
-            $text = $this->buildPostText($user, $language, $protocol);
-            $threads = $this->splitTextForProtocol($text, $protocol);
-
             $montageFilePath = User::montageUrlToFilePath($montagePath);
             if ($montageFilePath === null || ! is_file($montageFilePath)) {
                 throw new \RuntimeException('Montage file not found');
             }
 
-            $username = (string) ($user->lastfm_username ?? '');
-            $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
-            $altText = $this->generateAltText($chart, $language);
+            $chart = $this->charts->forUser((string) ($user->lastfm_username ?? ''));
+
+            $text = $this->buildPostText($chart, $language, $protocol);
+            $threads = $this->splitText($text, $protocol);
+            $altText = $this->generateAltText($chart['artists'], $language);
 
             if ($protocol === User::PROTOCOL_AT) {
                 $password = Crypt::decryptString((string) $user->password);
@@ -130,27 +129,28 @@ final class QueueProcessor
         }
     }
 
-    private function buildPostText(User $user, string $language, string $protocol): string
+    /**
+     * @param  array{artists: list<array{name:string,playcount:int}>, total_scrobbles: int}  $chart
+     */
+    private function buildPostText(array $chart, string $language, string $protocol): string
     {
-        $mention = $protocol === User::PROTOCOL_MASTODON ? '@lfm_blue@mastodon.social' : '@lastfm-butialabs.bsky.social';
-        $username = (string) ($user->lastfm_username ?? '');
-
-        $chart = $this->lastfm->getWeeklyArtistChart($username, 5);
-        $totalScrobbles = $this->lastfm->getWeeklyTotalScrobbles($username);
-
         $artistParts = [];
-        foreach ($chart as $a) {
+        foreach ($chart['artists'] as $a) {
             $artistParts[] = sprintf('%s (%d)', $a['name'], $a['playcount']);
         }
 
         $artistList = implode(' ', $artistParts);
-        $scrobblesText = sprintf(__('messages.post.scrobbles', [], $language), $totalScrobbles);
+        $scrobblesText = sprintf(__('messages.post.scrobbles', [], $language), $chart['total_scrobbles']);
 
         $prefix = sprintf('♫ %s: ', __('messages.post.top_artists', [], $language));
-        $suffix = sprintf('. #myweekcounted %s #music %s %s', $scrobblesText, __('messages.post.via', [], $language), $mention);
+        $suffix = sprintf(
+            '. #myweekcounted %s #music %s %s',
+            $scrobblesText,
+            __('messages.post.via', [], $language),
+            $this->protocolSetting($protocol, 'mention')
+        );
 
-        $limit = $protocol === User::PROTOCOL_MASTODON ? 500 : 253;
-        $available = $limit - mb_strlen($prefix) - mb_strlen($suffix);
+        $available = $this->maxLength($protocol) - mb_strlen($prefix) - mb_strlen($suffix);
         if ($available > 3 && mb_strlen($artistList) > $available) {
             $artistList = rtrim(mb_substr($artistList, 0, $available - 3)).'...';
         }
@@ -158,18 +158,31 @@ final class QueueProcessor
         return $prefix.$artistList.$suffix;
     }
 
-    private function generateAltText(array $chart, string $language): string
+    /**
+     * @param  list<array{name:string}>  $artists
+     */
+    private function generateAltText(array $artists, string $language): string
     {
-        $artistNames = array_map(fn ($artist) => $artist['name'], $chart);
-        $artistList = implode(', ', $artistNames);
+        return sprintf(
+            __('messages.post.alt_text', [], $language),
+            implode(', ', array_column($artists, 'name'))
+        );
+    }
 
-        return sprintf(__('messages.post.alt_text', [], $language), $artistList);
+    private function protocolSetting(string $protocol, string $key): string
+    {
+        return (string) config("lastfm.post.protocols.{$protocol}.{$key}", '');
+    }
+
+    private function maxLength(string $protocol): int
+    {
+        return (int) config("lastfm.post.protocols.{$protocol}.max_length", 253);
     }
 
     /** @return list<string> */
-    private function splitTextForProtocol(string $text, string $protocol): array
+    private function splitText(string $text, string $protocol): array
     {
-        $limit = $protocol === User::PROTOCOL_MASTODON ? 500 : 253;
+        $limit = $this->maxLength($protocol);
         if (mb_strlen($text) <= $limit) {
             return [$text];
         }

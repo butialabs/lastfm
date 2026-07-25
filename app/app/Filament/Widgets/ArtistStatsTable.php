@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Widgets;
 
 use App\Models\Artist;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
-use Filament\Forms\Components\DatePicker;
 use Illuminate\Database\Eloquent\Builder;
 
 class ArtistStatsTable extends TableWidget

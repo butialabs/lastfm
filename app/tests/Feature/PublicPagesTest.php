@@ -14,12 +14,6 @@ use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
-/*
-|--------------------------------------------------------------------------
-| Páginas públicas
-|--------------------------------------------------------------------------
-*/
-
 it('shows the login page to guests', function () {
     $this->get('/')
         ->assertOk()
@@ -78,12 +72,6 @@ it('logs out', function () {
     $this->assertGuest();
 });
 
-/*
-|--------------------------------------------------------------------------
-| Montagem pública
-|--------------------------------------------------------------------------
-*/
-
 it('serves montage images with cache headers', function () {
     Storage::fake('montage');
     $hash = md5('42');
@@ -99,12 +87,6 @@ it('rejects invalid montage hashes', function () {
     $this->get('/montage/not-a-hash')->assertNotFound();
     $this->get('/montage/'.str_repeat('a', 32))->assertNotFound(); // missing file
 });
-
-/*
-|--------------------------------------------------------------------------
-| Login Bluesky (Livewire)
-|--------------------------------------------------------------------------
-*/
 
 it('logs in with Bluesky and creates the user with encrypted password', function () {
     Http::fake([
@@ -148,12 +130,6 @@ it('shows an error when Bluesky login fails', function () {
     $this->assertGuest();
 });
 
-/*
-|--------------------------------------------------------------------------
-| OAuth Mastodon (callback)
-|--------------------------------------------------------------------------
-*/
-
 it('completes the Mastodon OAuth flow', function () {
     Http::fake([
         'https://mastodon.social/oauth/token' => Http::response(['access_token' => 'token-xyz']),
@@ -186,12 +162,6 @@ it('rejects Mastodon callback with invalid state', function () {
 
     $this->assertGuest();
 });
-
-/*
-|--------------------------------------------------------------------------
-| Settings (Livewire)
-|--------------------------------------------------------------------------
-*/
 
 it('saves settings converting the schedule to UTC', function () {
     Http::fake([

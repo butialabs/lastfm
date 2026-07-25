@@ -23,16 +23,20 @@ services:
     container_name: lastfm
     environment:
       TZ: UTC
+      PHP_DATE_TIMEZONE: UTC
       APP_URL: https://your-domain.com
       APP_KEY: base64:your_app_key # optional, auto-generated on first boot
       LASTFM_API: your_lastfm_api_key
       ADMIN_USER: admin
       ADMIN_PASSWORD: your_secure_password
     ports:
-      - 80:80
+      - 80:8080
     volumes:
-      - ./lastfm/data:/app/data
+      - lastfm-data:/app/data
     restart: unless-stopped
+
+volumes:
+  lastfm-data:
 ```
 
 2. Start the container:
@@ -49,16 +53,21 @@ docker compose up -d
 |----------|-------------|----------|
 | `APP_URL` | Public URL of your instance | Yes |
 | `LASTFM_API` | Your Last.fm API key ([Get one here](https://www.last.fm/api/account/create)) | Yes |
-| `ADMIN_USER` | Initial admin username (seeded on first boot) | Yes |
-| `ADMIN_PASSWORD` | Initial admin password (seeded on first boot, stored hashed) | Yes |
+| `ADMIN_USER` | Initial admin username (seeded on first boot) | First boot |
+| `ADMIN_PASSWORD` | Initial admin password (seeded on first boot, stored hashed) | First boot |
 | `APP_KEY` | Laravel encryption key (`php artisan key:generate --show`). Auto-generated and persisted in the data volume if omitted | No |
 | `ENCRYPTION_KEY` | **Upgrades from v1 only**: legacy key used to decrypt old credentials during the one-time import. Can be removed afterwards | No |
-| `TZ` | Timezone (e.g., `America/Sao_Paulo`) | No |
+| `TZ` / `PHP_DATE_TIMEZONE` | Container and PHP timezone (e.g., `America/Sao_Paulo`). Schedules are always stored and compared in UTC | No |
 | `LASTFM_PROXY_URL` | Proxy fallback for Last.fm image scraping (see below) | No |
 | `THEAUDIODB_API_KEY` / `FANART_API_KEY` | Alternative artist image providers for the admin panel | No |
 | `MAX_ERROR_COUNT` | Send attempts before giving up until next week (default `3`) | No |
+| `BLUESKY_MENTION` / `MASTODON_MENTION` | Account mentioned in generated posts (defaults to the Butiá Labs accounts) | No |
+| `IMAGE_BACKFILL_PER_TICK` | Artists retried per scheduler tick (default `5`, see below) | No |
+| `IMAGE_PLACEHOLDER_RETRY_DAYS` | Days before a placeholder result is attempted again (default `30`) | No |
 
-> **APP_KEY stability:** encrypted credentials (Bluesky app passwords / Mastodon tokens) are tied to `APP_KEY`. Once set, by you or auto-generated into `./lastfm/data/.app_key`, never change it, or users will need to log in again.
+The base image's own variables (`PHP_OPCACHE_*`, `NGINX_*`, `SSL_MODE`, `AUTORUN_*`, ...) are documented in the [serversideup/php reference](https://serversideup.net/open-source/docker-php/docs/reference/environment-variable-specification).
+
+> **APP_KEY stability:** encrypted credentials (Bluesky app passwords / Mastodon tokens) are tied to `APP_KEY`. Once set, by you or auto-generated into `data/.app_key`, never change it, or users will need to log in again.
 
 ### Upgrading from v1 (custom PHP app)
 
@@ -67,12 +76,12 @@ After a successful import, `ENCRYPTION_KEY` can be removed from the environment.
 
 ### Proxy fallback
 
-In 2019, Last.fm removed the image API, so artist images have to be scraped from the public artist page. Under heavy traffic Last.fm will block requests (`403`/`429`). The service uses a simple two-stage fallback:
+In 2019, Last.fm removed the image API, so artist images have to be scraped from the public artist page. Under heavy traffic Last.fm will block requests (`403`/`429`). Image and page requests use a two-stage fallback:
 
-**Direct (1 attempt) → Proxy (2 attempts).**
+**Proxy (2 attempts) → Direct (1 attempt).**
 
-- The direct attempt rotates User-Agents and sets full browser headers to reduce bot-detection hits.
-- If it fails and `LASTFM_PROXY_URL` is set, the request is retried up to twice through that single proxy.
+- If `LASTFM_PROXY_URL` is set, the request is tried twice through that proxy first.
+- The direct attempt runs last, rotating User-Agents and sending full browser headers to reduce bot-detection hits.
 - If `LASTFM_PROXY_URL` is empty, only the direct attempt runs.
 
 ```env
@@ -93,27 +102,24 @@ Mount the `/app/data` volume to persist:
 
 ### Requirements
 
-- PHP >= 8.4 with `pdo_sqlite`, `sqlite3`, `gd`
+- PHP >= 8.4 with `gd`, `intl`, `pdo_sqlite`
 - Composer
 
 ### Setup
 
 ```bash
 cd lastfm/app
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate
-php artisan db:seed --class=AdminSeeder
-php artisan serve
+composer setup    # install, .env, key, migrate, seed admin
+composer dev      # php artisan serve
 ```
 
 Edit `.env` with your settings (`LASTFM_API`, `ADMIN_USER`, `ADMIN_PASSWORD`, ...).
 
-Run the test suite (Pest):
+Code style (Pint) and the test suite (Pest):
 
 ```bash
-php artisan test
+composer lint
+composer test
 ```
 
 ---
@@ -121,14 +127,12 @@ php artisan test
 ## 🔧 CLI Commands
 
 ```bash
-# Process scheduled users (generate montages and mark as QUEUED)
+# Process scheduled users (generate montages, mark as QUEUED)
+# and retry a slice of artist images still missing one
 php artisan lastfm:schedule
 
 # Process the queue (send posts to Bluesky/Mastodon)
 php artisan lastfm:send
-
-# Download missing artist images
-php artisan lastfm:images-download
 
 # Force process + send for a single user
 php artisan lastfm:force-send {user_id}
@@ -137,8 +141,10 @@ php artisan lastfm:force-send {user_id}
 php artisan lastfm:import-legacy
 ```
 
-```cron
-* * * * * cd /path/to/app && php artisan schedule:run >> /dev/null 2>&1
+Outside Docker, run the scheduler yourself:
+
+```bash
+php artisan schedule:work
 ```
 
 ---

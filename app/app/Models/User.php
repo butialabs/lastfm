@@ -18,12 +18,17 @@ class User extends Authenticatable
     use HasFactory;
 
     public const STATUS_ACTIVE = 'ACTIVE';
+
     public const STATUS_SCHEDULE = 'SCHEDULE';
+
     public const STATUS_QUEUED = 'QUEUED';
+
     public const STATUS_SENDING = 'SENDING';
+
     public const STATUS_ERROR = 'ERROR';
 
     public const PROTOCOL_AT = 'at';
+
     public const PROTOCOL_MASTODON = 'mastodon';
 
     protected $fillable = [
@@ -158,9 +163,7 @@ class User extends Authenticatable
         $this->forceFill(['callback' => $message])->save();
     }
 
-    /**
-     * On panel access: reset error count and re-enable ERROR users.
-     */
+    // On panel access: reset error count and re-enable ERROR users.
     public function resetOnAccess(): void
     {
         $newStatus = (filled($this->lastfm_username) && $this->status === self::STATUS_ERROR)
@@ -176,7 +179,8 @@ class User extends Authenticatable
 
     /**
      * Users scheduled for the current minute. Comparison happens in UTC,
-     * matching the legacy behavior (day/time are stored in UTC).
+     * matching the legacy behavior (day/time are stored in UTC). `time` is a
+     * string column, so the minute is matched by prefix ("HH:MM" or "HH:MM:SS").
      *
      * @return Collection<int, User>
      */
@@ -186,15 +190,12 @@ class User extends Authenticatable
 
         return static::query()
             ->where('status', self::STATUS_SCHEDULE)
-            ->whereNotNull('day_of_week')
-            ->whereNotNull('time')
+            ->where('day_of_week', (int) $now->format('N'))
+            ->where('time', 'LIKE', $now->format('H:i').'%')
             ->whereNotNull('timezone')
             ->whereNotNull('lastfm_username')
             ->where('lastfm_username', '!=', '')
-            ->get()
-            ->filter(fn (User $user) => (int) $user->day_of_week === (int) $now->format('N')
-                && substr((string) $user->time, 0, 5) === $now->format('H:i'))
-            ->values();
+            ->get();
     }
 
     /** @return Collection<int, User> */
@@ -228,9 +229,6 @@ class User extends Authenticatable
         return [(int) $targetUtc->format('N'), $targetUtc->format('H:i:s')];
     }
 
-    /**
-     * Schedule time (stored in UTC) formatted in the given timezone.
-     */
     public function scheduleHourForTimezone(string $timezone): string
     {
         $dow = (int) ($this->day_of_week ?? 7);

@@ -2,10 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Filament\Pages\Auth\Login;
+use App\Filament\Pages\ManageConfig;
 use App\Filament\Resources\Artists\Pages\ListArtists;
 use App\Filament\Resources\Users\Pages\ListUsers;
+use App\Filament\Widgets\ArtistStatsTable;
+use App\Filament\Widgets\StatsOverview;
 use App\Models\Admin;
 use App\Models\Artist;
+use App\Models\Config;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -25,7 +30,7 @@ it('shows the login page', function () {
 });
 
 it('logs in with the seeded admin credentials', function () {
-    Livewire::test(\App\Filament\Pages\Auth\Login::class)
+    Livewire::test(Login::class)
         ->set('data.username', $this->admin->username)
         ->set('data.password', 'password')
         ->call('authenticate')
@@ -41,8 +46,8 @@ it('loads the dashboard with the stats widget', function () {
     $this->actingAs($this->admin, 'admin')
         ->get('/admin')
         ->assertOk()
-        ->assertSeeLivewire(\App\Filament\Widgets\StatsOverview::class)
-        ->assertDontSeeLivewire(\App\Filament\Widgets\ArtistStatsTable::class);
+        ->assertSeeLivewire(StatsOverview::class)
+        ->assertDontSeeLivewire(ArtistStatsTable::class);
 });
 
 it('lists users with filters and actions', function () {
@@ -98,7 +103,7 @@ it('loads the statistics and config pages', function () {
     $this->actingAs($this->admin, 'admin')
         ->get('/admin/statistics')
         ->assertOk()
-        ->assertSeeLivewire(\App\Filament\Widgets\ArtistStatsTable::class);
+        ->assertSeeLivewire(ArtistStatsTable::class);
 
     $this->actingAs($this->admin, 'admin')
         ->get('/admin/manage-config')
@@ -108,9 +113,19 @@ it('loads the statistics and config pages', function () {
 it('saves the analytics script config', function () {
     $this->actingAs($this->admin, 'admin');
 
-    Livewire::test(\App\Filament\Pages\ManageConfig::class)
+    Livewire::test(ManageConfig::class)
         ->set('data.analytics_script', '<script>x</script>')
         ->call('save');
 
-    expect(\App\Models\Config::getValue('analytics_script'))->toBe('<script>x</script>');
+    expect(Config::getValue('analytics_script'))->toBe('<script>x</script>');
+});
+
+it('requires an authenticated admin to stream artist images', function () {
+    $artist = Artist::factory()->create();
+
+    $this->get(route('admin.artists.image', $artist))->assertRedirect();
+
+    $this->actingAs($this->admin, 'admin')
+        ->get(route('admin.artists.image', $artist))
+        ->assertNotFound();
 });

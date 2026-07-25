@@ -19,14 +19,14 @@ it('decrypts payloads produced by the legacy app', function () {
 });
 
 it('round-trips encrypt/decrypt in the legacy format', function () {
-    $payload = $this->crypto->encrypt('senha com acentuação é ç ã');
+    $payload = $this->crypto->encrypt('password with accents é ç ã');
 
-    // Formato: base64( IV(16) ‖ HMAC(32) ‖ ciphertext )
+    // Format: base64( IV(16) ‖ HMAC(32) ‖ ciphertext )
     $raw = base64_decode($payload, true);
     expect($raw)->not->toBeFalse()
         ->and(strlen($raw))->toBeGreaterThan(48);
 
-    expect($this->crypto->decrypt($payload))->toBe('senha com acentuação é ç ã');
+    expect($this->crypto->decrypt($payload))->toBe('password with accents é ç ã');
 });
 
 it('rejects tampered payloads (HMAC mismatch)', function () {

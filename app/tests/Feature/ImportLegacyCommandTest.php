@@ -169,7 +169,7 @@ it('imports the legacy database preserving ids and converting crypto and timesta
     expect(Crypt::decryptString($alice->password))->toBe('alice-app-password');
     expect(Crypt::decryptString(User::find(9)->token))->toBe('bob-mastodon-token');
 
-    // Timestamps string/DATE_ATOM convertidos para datetime
+    // String/DATE_ATOM timestamps converted to datetime
     expect($alice->created_at->format('Y-m-d H:i:s'))->toBe('2025-12-27 19:00:00')
         ->and($alice->updated_at->format('Y-m-d H:i:s'))->toBe('2026-04-13 04:53:30');
 
@@ -199,7 +199,7 @@ it('nulls credentials with invalid HMAC and keeps importing', function () {
         'instance' => 'https://bsky.social',
         'username' => 'eve',
         'did' => 'did:plc:eve',
-        'password' => base64_encode(str_repeat('x', 64)), // HMAC inválido
+        'password' => base64_encode(str_repeat('x', 64)), // invalid HMAC
         'token' => null,
         'lastfm_username' => 'eve',
         'day_of_week' => null,
@@ -223,7 +223,7 @@ it('nulls credentials with invalid HMAC and keeps importing', function () {
 });
 
 it('is a no-op when there is no legacy database', function () {
-    config(['database.connections.legacy.database' => sys_get_temp_dir().'/nao-existe-'.uniqid().'.sqlite']);
+    config(['database.connections.legacy.database' => sys_get_temp_dir().'/does-not-exist-'.uniqid().'.sqlite']);
     DB::purge('legacy');
 
     $this->artisan('lastfm:import-legacy')->assertSuccessful();

@@ -1,26 +1,35 @@
-FROM shinsenter/laravel:php8.4-nginx
+FROM serversideup/php:8.4-fpm-nginx
 
-ENV APP_PATH=/app \
-    DOCUMENT_ROOT=public \
-    TZ=UTC \
-    ENABLE_TUNING_FPM=1 \
-    DISABLE_AUTORUN_SCRIPTS=0 \
-    COMPOSER_OPTIMIZE_AUTOLOADER=1 \
-    LARAVEL_ENABLE_SCHEDULER=1 \
-    LARAVEL_AUTO_MIGRATION=1 \
-    LARAVEL_ENABLE_QUEUE_WORKER=0 \
-    PHP_OPCACHE_VALIDATE_TIMESTAMPS=0
+USER root
 
-COPY app/ ${APP_PATH}/
-WORKDIR ${APP_PATH}
+ENV APP_BASE_DIR=/app \
+    NGINX_WEBROOT=/app/public \
+    HEALTHCHECK_PATH=/up \
+    AUTORUN_ENABLED=true \
+    AUTORUN_LARAVEL_STORAGE_LINK=false \
+    AUTORUN_LARAVEL_MIGRATION_SKIP_DB_CHECK=true \
+    PHP_OPCACHE_ENABLE=1 \
+    PHP_OPCACHE_VALIDATE_TIMESTAMPS=0 \
+    PHP_DATE_TIMEZONE=UTC
 
-RUN composer config platform.php-64bit 8.4 \
-    && composer install --no-interaction --optimize-autoloader --no-dev \
-    && php artisan filament:assets
+ENV APP_NAME=LastFM \
+    APP_ENV=production \
+    APP_DEBUG=false \
+    DB_CONNECTION=sqlite \
+    SESSION_DRIVER=file \
+    CACHE_STORE=file \
+    QUEUE_CONNECTION=sync
 
-COPY startup/* /startup/
-COPY hooks/onready/* ${APP_PATH}/hooks/onready/
-RUN chmod +x /startup/* ${APP_PATH}/hooks/onready/* \
-    && chown -R www-data:www-data ${APP_PATH}
+RUN install-php-extensions gd intl
 
-EXPOSE 80
+COPY --chmod=755 docker/entrypoint.d/ /etc/entrypoint.d/
+COPY --chmod=755 docker/s6-overlay/ /etc/s6-overlay/
+RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/laravel-scheduler
+
+USER www-data
+WORKDIR /app
+COPY --chown=www-data:www-data app/ /app/
+
+RUN composer install --no-interaction --no-dev --no-progress --optimize-autoloader \
+    && php artisan filament:assets \
+    && mkdir -p data/db data/cache/artists data/logs data/montage

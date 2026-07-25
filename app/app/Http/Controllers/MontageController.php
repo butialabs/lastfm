@@ -9,10 +9,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MontageController extends Controller
 {
-    /**
-     * Serve data/montage/{hash}.jpg — public route preserved from the legacy
-     * app (filename = md5(user_id)).
-     */
+    // Serves data/montage/{hash}.jpg — public route preserved from the legacy
+    // app (filename = md5(user_id)).
     public function show(string $hash): BinaryFileResponse
     {
         abort_unless(preg_match('/^[a-f0-9]{32}$/i', $hash) === 1, 404);
@@ -20,11 +18,13 @@ class MontageController extends Controller
         $path = Storage::disk('montage')->path(strtolower($hash).'.jpg');
         abort_unless(is_file($path), 404);
 
+        $mtime = (int) filemtime($path);
+
         return response()->file($path, [
             'Content-Type' => 'image/jpeg',
             'Cache-Control' => 'public, max-age=86400',
-            'Last-Modified' => gmdate('D, d M Y H:i:s', (int) filemtime($path)).' GMT',
-            'ETag' => md5_file($path),
+            'Last-Modified' => gmdate('D, d M Y H:i:s', $mtime).' GMT',
+            'ETag' => sprintf('"%s"', md5($hash.$mtime)),
         ]);
     }
 }

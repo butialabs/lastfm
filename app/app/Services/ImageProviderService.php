@@ -9,11 +9,6 @@ use Illuminate\Support\Facades\Log;
 
 final class ImageProviderService
 {
-    public function hasAnyProvider(): bool
-    {
-        return $this->theaudiodbKey() !== null || $this->fanartKey() !== null;
-    }
-
     /**
      * @return list<array{source:string, type:string, url:string}>
      */

@@ -1,9 +1,6 @@
-cmd.txt
-**/vendor/*
-vendor
 .env
-composer.lock
+vendor
+**/vendor/*
 **/node_modules/*
 data/**
-!data/**/.gitkeep
 app/data/**/*

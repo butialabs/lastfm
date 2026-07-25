@@ -6,10 +6,11 @@ namespace App\Filament\Resources\Artists\Tables;
 
 use App\Models\Artist;
 use App\Services\ImageProviderService;
-use App\Services\LastFmService;
+use App\Services\LastFm\ArtistImageFetcher;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -76,8 +77,8 @@ class ArtistsTable
                     ->label('Force download')
                     ->icon('heroicon-o-arrow-path')
                     ->requiresConfirmation()
-                    ->action(function (Artist $record, LastFmService $lastfm): void {
-                        $ok = $lastfm->regenerateArtistImage((int) $record->id);
+                    ->action(function (Artist $record, ArtistImageFetcher $images): void {
+                        $ok = $images->regenerate((int) $record->id);
 
                         Notification::make()
                             ->title($ok ? 'Image updated' : 'Failed to download image')
@@ -93,8 +94,8 @@ class ArtistsTable
                             ->url()
                             ->required(),
                     ])
-                    ->action(function (Artist $record, array $data, LastFmService $lastfm): void {
-                        $ok = $lastfm->downloadArtistImageFromUrl((int) $record->id, (string) $data['url']);
+                    ->action(function (Artist $record, array $data, ArtistImageFetcher $images): void {
+                        $ok = $images->fromUrl((int) $record->id, (string) $data['url']);
 
                         Notification::make()
                             ->title($ok ? 'Image updated' : 'Failed to download image')
@@ -109,7 +110,7 @@ class ArtistsTable
 
                         if ($sources === []) {
                             return [
-                                \Filament\Forms\Components\Placeholder::make('empty')
+                                Placeholder::make('empty')
                                     ->label('No sources found (TheAudioDB/Fanart).'),
                             ];
                         }
@@ -131,12 +132,12 @@ class ArtistsTable
                                 ->required(),
                         ];
                     })
-                    ->action(function (Artist $record, array $data, LastFmService $lastfm): void {
+                    ->action(function (Artist $record, array $data, ArtistImageFetcher $images): void {
                         if (empty($data['url'])) {
                             return;
                         }
 
-                        $ok = $lastfm->downloadArtistImageFromUrl((int) $record->id, (string) $data['url']);
+                        $ok = $images->fromUrl((int) $record->id, (string) $data['url']);
 
                         Notification::make()
                             ->title($ok ? 'Image updated' : 'Failed to download image')
@@ -149,10 +150,10 @@ class ArtistsTable
                     ->label('Force download')
                     ->icon('heroicon-o-arrow-path')
                     ->requiresConfirmation()
-                    ->action(function ($records, LastFmService $lastfm): void {
+                    ->action(function ($records, ArtistImageFetcher $images): void {
                         $ok = 0;
                         foreach ($records as $record) {
-                            if ($lastfm->regenerateArtistImage((int) $record->id)) {
+                            if ($images->regenerate((int) $record->id)) {
                                 $ok++;
                             }
                         }

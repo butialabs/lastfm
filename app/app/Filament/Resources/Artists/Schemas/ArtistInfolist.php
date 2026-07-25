@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Artists\Schemas;
 
+use App\Models\Artist;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Schema;
@@ -28,7 +29,7 @@ class ArtistInfolist
                 TextEntry::make('image_hash')
                     ->badge()
                     ->formatStateUsing(fn ($record): string => match (true) {
-                        $record->image_hash === \App\Models\Artist::PLACEHOLDER_HASH => 'placeholder',
+                        $record->image_hash === Artist::PLACEHOLDER_HASH => 'placeholder',
                         empty($record->image_hash) => 'missing',
                         default => (string) $record->image_hash,
                     }),

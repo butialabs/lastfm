@@ -22,6 +22,7 @@ Route::get('/montage/{hash}', [MontageController::class, 'show'])
     ->where('hash', '[a-fA-F0-9]{32}')
     ->name('montage');
 
-// Stream of cached artist images (consumed by the Filament panel).
+// Cached artist images, consumed by the Filament panel.
 Route::get('/admin/artists/{artist}/image', [ArtistImageController::class, 'show'])
+    ->middleware('auth:admin')
     ->name('admin.artists.image');

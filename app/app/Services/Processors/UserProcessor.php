@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Services\Processors;
 
 use App\Models\User;
-use App\Services\LastFmService;
+use App\Services\LastFm\ArtistImageFetcher;
+use App\Services\LastFm\WeeklyChartService;
 use App\Services\MontageService;
 use Illuminate\Support\Facades\Log;
 
 final class UserProcessor
 {
     public function __construct(
-        private readonly LastFmService $lastfm,
+        private readonly WeeklyChartService $charts,
+        private readonly ArtistImageFetcher $images,
         private readonly MontageService $montage,
     ) {}
 
@@ -29,11 +31,14 @@ final class UserProcessor
         foreach ($due as $user) {
             $this->processUser($user);
         }
+
+        $backfill = $this->images->backfill();
+
+        if ($backfill['attempted'] > 0) {
+            Log::channel('artist_images')->info('Artist image backfill slice', $backfill);
+        }
     }
 
-    /**
-     * Process a single user by ID (force mode).
-     */
     public function processUserById(int $userId): bool
     {
         $user = User::find($userId);
@@ -65,20 +70,17 @@ final class UserProcessor
                 return false;
             }
 
-            $chart = $this->lastfm->getWeeklyArtistChart($lastfmUsername, 5, $userId);
-            if ($chart === []) {
+            $chart = $this->charts->forUser($lastfmUsername, userId: $userId);
+
+            if ($chart['artists'] === []) {
                 $user->setCallback('No weekly chart data');
 
                 return false;
             }
 
             $paths = [];
-            foreach ($chart as $artist) {
-                $paths[] = $this->lastfm->getArtistImagePath(
-                    artistName: (string) $artist['name'],
-                    imageUrl: $artist['imageUrl'] ?? null,
-                    mbid: $artist['mbid'] ?? null,
-                );
+            foreach ($chart['artists'] as $artist) {
+                $paths[] = $this->images->pathFor($artist['name'], $artist['mbid']);
             }
 
             $montagePath = $this->montage->createWeeklyMontage($userId, $paths);

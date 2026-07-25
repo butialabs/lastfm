@@ -12,40 +12,37 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  php-lint:
-    name: 🔍 PHP syntax check
+  quality:
+    name: 🔍 Code style and tests
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app
 
     steps:
       - name: 📥 Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: 🐘 Install PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          tools: none
+          php-version: '8.4'
+          extensions: gd, intl, pdo_sqlite, sqlite3, zip
+          tools: composer
 
-      - name: 🔍 Validate PHP syntax
-        run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            FILES=$(git ls-files | grep '\.php$' || true)
-          else
-            FILES=$(git diff --name-only --diff-filter=d "$PREVIOUS_TAG"..HEAD | grep '\.php$' || true)
-          fi
-          if [ -z "$FILES" ]; then
-            echo "No PHP files changed since last tag."
-            exit 0
-          fi
-          echo "$FILES" | xargs -P4 -I{} php -l {}
+      - name: 📦 Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: 🎨 Check code style
+        run: vendor/bin/pint --test
+
+      - name: 🧪 Run tests
+        run: php artisan test
 
   setup:
     name: 🔍 Extract version
     runs-on: ubuntu-24.04
-    needs: [php-lint]
+    needs: [quality]
     outputs:
       version: ${{ steps.get_version.outputs.VERSION }}
       prerelease: ${{ steps.get_version.outputs.PRERELEASE }}

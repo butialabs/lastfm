@@ -99,9 +99,6 @@ final class BlueskyClient
         ];
     }
 
-    /**
-     * Resolve a Bluesky handle to its DID.
-     */
     public function resolveHandle(string $instance, string $handle): ?string
     {
         $base = $this->normalizeInstance($instance);
@@ -129,6 +126,9 @@ final class BlueskyClient
      */
     public function parseFacets(string $instance, string $text): array
     {
+        // Bluesky indexes facets by byte offset, which is exactly what
+        // preg_match_all reports with /u + PREG_OFFSET_CAPTURE. Do not convert
+        // these offsets with mb_* functions.
         $facets = [];
 
         preg_match_all(
@@ -140,8 +140,7 @@ final class BlueskyClient
 
         foreach ($matches[0] as $match) {
             $mention = (string) $match[0];
-            $charOffset = (int) $match[1];
-            $byteStart = strlen(substr($text, 0, $charOffset));
+            $byteStart = (int) $match[1];
             $byteEnd = $byteStart + strlen($mention);
 
             $did = $this->resolveHandle($instance, $mention);
@@ -170,8 +169,7 @@ final class BlueskyClient
 
         foreach ($matches[0] as $index => $match) {
             $hashtag = (string) $match[0];
-            $charOffset = (int) $match[1];
-            $byteStart = strlen(substr($text, 0, $charOffset));
+            $byteStart = (int) $match[1];
             $byteEnd = $byteStart + strlen($hashtag);
             $tag = (string) $matches[1][$index][0];
 
@@ -198,8 +196,7 @@ final class BlueskyClient
 
         foreach ($matches[0] as $match) {
             $url = (string) $match[0];
-            $charOffset = (int) $match[1];
-            $byteStart = strlen(substr($text, 0, $charOffset));
+            $byteStart = (int) $match[1];
             $byteEnd = $byteStart + strlen($url);
 
             $facets[] = [

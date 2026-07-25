@@ -1,8 +1,0 @@
-#!/bin/bash
-set -e
-
-echo "[i] Setting up data directories..."
-mkdir -p /app/data/montage /app/data/cache/artists /app/data/db /app/data/logs
-chown -R www-data:www-data /app/data
-chmod -R 755 /app/data
-echo "[V] Data directories ready"

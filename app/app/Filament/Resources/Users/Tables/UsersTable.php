@@ -8,7 +8,6 @@ use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
-use Filament\Support\Colors\Color;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;

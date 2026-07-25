@@ -7,6 +7,7 @@ use App\Models\ArtistStat;
 use App\Models\User;
 use App\Services\Processors\QueueProcessor;
 use App\Services\Processors\UserProcessor;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -20,7 +21,7 @@ beforeEach(function () {
     Storage::fake('artist-cache');
     config(['lastfm.api_key' => 'test-api-key', 'lastfm.proxy_url' => null]);
 
-    // JPEG real (>2KB) para passar pelas validações de imagem do fluxo.
+    // A real JPEG over 2KB, so it is not treated as a placeholder image.
     $this->jpegBinary = (string) ImageManager::gd()
         ->create(300, 300)
         ->fill('#a4666a')
@@ -50,12 +51,6 @@ function makeQueuedUser(string $jpegBinary, array $overrides = []): User
     return $user;
 }
 
-/*
-|--------------------------------------------------------------------------
-| UserProcessor (schedule → montagem → QUEUED)
-|--------------------------------------------------------------------------
-*/
-
 it('processes a scheduled user: records stats, builds montage and queues', function () {
     $user = User::factory()->scheduled()->create(['lastfm_username' => 'alice']);
 
@@ -73,10 +68,8 @@ it('processes a scheduled user: records stats, builds montage and queues', funct
         ->and($user->social_montage)->toBe('/montage/'.md5((string) $user->id))
         ->and($user->callback)->toBe('Queued successfully');
 
-    // Montage stored on disk as md5(user_id)
     Storage::disk('montage')->assertExists(md5((string) $user->id).'.jpg');
 
-    // Stats recorded for the 2 chart artists
     expect(Artist::where('name', 'Band One')->exists())->toBeTrue();
     expect(ArtistStat::where('user_id', $user->id)->count())->toBe(2);
 });
@@ -98,7 +91,7 @@ it('marks error with SCHEDULE retry status when the chart fails', function () {
 
 it('selects users due for schedule at the exact UTC minute', function () {
     // Now: Friday (5) 12:30 UTC
-    $now = Carbon\CarbonImmutable::parse('2026-07-24 12:30:00', 'UTC');
+    $now = CarbonImmutable::parse('2026-07-24 12:30:00', 'UTC');
 
     $due = User::factory()->scheduled()->create([
         'lastfm_username' => 'alice',
@@ -115,12 +108,6 @@ it('selects users due for schedule at the exact UTC minute', function () {
     expect($result)->toHaveCount(1)
         ->and($result->first()->id)->toBe($due->id);
 });
-
-/*
-|--------------------------------------------------------------------------
-| QueueProcessor (QUEUED → envio → SCHEDULE)
-|--------------------------------------------------------------------------
-*/
 
 it('sends to Bluesky as a threaded post with the montage embed', function () {
     $user = makeQueuedUser($this->jpegBinary);
@@ -146,7 +133,7 @@ it('sends to Bluesky as a threaded post with the montage embed', function () {
     expect($user->status)->toBe(User::STATUS_SCHEDULE)
         ->and($user->social_message)->toContain('Band One (30)')
         ->and($user->social_message)->toContain('#myweekcounted')
-        ->and($user->social_message)->toContain('50 Scrobbles') // 30 + 20, placeholder %d preenchido
+        ->and($user->social_message)->toContain('50 Scrobbles') // 30 + 20, the %d placeholder is filled in
         ->and($user->error_count)->toBe(0)
         ->and($user->callback)->toBe('Sent successfully');
 
@@ -154,6 +141,30 @@ it('sends to Bluesky as a threaded post with the montage embed', function () {
     Http::assertSent(fn ($request) => str_contains($request->url(), 'createRecord')
         && $request['record']['embed']['$type'] === 'app.bsky.embed.images'
         && str_contains($request['record']['embed']['images'][0]['alt'], 'Band One'));
+});
+
+it('fetches the weekly chart only once per send', function () {
+    $user = makeQueuedUser($this->jpegBinary);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response($this->weeklyChart),
+        'https://bsky.social/xrpc/com.atproto.server.createSession' => Http::response([
+            'did' => 'did:plc:alice',
+            'accessJwt' => 'jwt',
+            'refreshJwt' => 'refresh',
+        ]),
+        'https://bsky.social/xrpc/com.atproto.repo.uploadBlob' => Http::response([
+            'blob' => ['$type' => 'blob', 'ref' => ['$link' => 'bafkreiabc'], 'mimeType' => 'image/jpeg', 'size' => 12345],
+        ]),
+        'https://bsky.social/xrpc/com.atproto.identity.resolveHandle' => Http::response(['did' => 'did:plc:bot']),
+        'https://bsky.social/xrpc/com.atproto.repo.createRecord' => Http::response(['uri' => 'at://x/1', 'cid' => 'cid1']),
+    ]);
+
+    expect(app(QueueProcessor::class)->sendForUser($user))->toBeTrue();
+
+    $chartCalls = Http::recorded(fn ($request) => str_contains($request->url(), 'user.getweeklyartistchart'));
+
+    expect($chartCalls)->toHaveCount(1);
 });
 
 it('sends to Mastodon with media attached to the first status', function () {
@@ -213,7 +224,7 @@ it('requeues on temporary failure and gives up after MAX_ERROR_COUNT', function 
 it('fails when the montage file is missing', function () {
     $user = User::factory()->queued()->create([
         'password' => Crypt::encryptString('app-password'),
-        'social_montage' => '/montage/'.md5('inexistente'),
+        'social_montage' => '/montage/'.md5('missing-montage'),
     ]);
 
     Http::fake([

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\DB;
 
 class Artist extends Model
 {
@@ -29,16 +29,10 @@ class Artist extends Model
         return $this->hasMany(ArtistStat::class);
     }
 
-    /** @param Builder<Artist> $query */
-    public function scopeSearch(Builder $query, ?string $term): Builder
-    {
-        return filled($term) ? $query->where('name', 'LIKE', '%'.$term.'%') : $query;
-    }
-
     /**
      * "No image" filter: '1' = null/empty hash; 'placeholder' = placeholder hash.
      *
-     * @param Builder<Artist> $query
+     * @param  Builder<Artist>  $query
      */
     public function scopeNoImage(Builder $query, ?string $mode): Builder
     {
@@ -49,11 +43,23 @@ class Artist extends Model
         };
     }
 
-    public static function updateImageHash(string $oldHash, string $newHash): int
+    /**
+     * Artists worth another download attempt: never fetched, previously failed,
+     * or holding a placeholder result older than the cutoff. Oldest attempt
+     * first, so repeated failures rotate instead of starving the queue.
+     *
+     * @param  Builder<Artist>  $query
+     */
+    public function scopeNeedsImageAttempt(Builder $query, DateTimeInterface $placeholderCutoff): Builder
     {
-        return static::query()
-            ->where('image_hash', $oldHash)
-            ->update(['image_hash' => $newHash, 'updated_at' => now()]);
+        return $query
+            ->where(fn (Builder $q) => $q
+                ->whereNull('image_hash')
+                ->orWhere('image_hash', '')
+                ->orWhere(fn (Builder $stale) => $stale
+                    ->where('image_hash', self::PLACEHOLDER_HASH)
+                    ->where('updated_at', '<', $placeholderCutoff)))
+            ->orderBy('updated_at');
     }
 
     public function recordStats(int $userId, int $position, int $playCount): ArtistStat
@@ -64,40 +70,5 @@ class Artist extends Model
             'play_count' => $playCount,
             'recorded_at' => now(),
         ]);
-    }
-
-    /**
-     * Aggregated appearance statistics query (admin Statistics page).
-     */
-    public static function appearanceStatsQuery(array $filters = []): \Illuminate\Database\Query\Builder
-    {
-        $query = DB::table('artists as a')
-            ->join('artist_stats as s', 'a.id', '=', 's.artist_id')
-            ->selectRaw('a.id, a.name, COUNT(s.id) as appearance_count, AVG(s.position) as average_position, SUM(s.play_count) as total_plays')
-            ->groupBy('a.id', 'a.name');
-
-        if (filled($filters['from_date'] ?? null)) {
-            $query->where('s.recorded_at', '>=', $filters['from_date']);
-        }
-
-        if (filled($filters['to_date'] ?? null)) {
-            $query->where('s.recorded_at', '<=', $filters['to_date']);
-        }
-
-        if (filled($filters['search'] ?? null)) {
-            $query->where('a.name', 'LIKE', '%'.$filters['search'].'%');
-        }
-
-        $sortColumns = [
-            'name' => 'a.name',
-            'appearance_count' => 'appearance_count',
-            'average_position' => 'average_position',
-            'total_plays' => 'total_plays',
-        ];
-
-        $sort = $sortColumns[$filters['sort'] ?? 'appearance_count'] ?? 'appearance_count';
-        $order = strtolower((string) ($filters['order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
-
-        return $query->orderBy($sort, $order);
     }
 }
