@@ -14,6 +14,10 @@ use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function () {
+    config(['lastfm.api_key' => 'test-api-key', 'lastfm.proxy_url' => null]);
+});
+
 it('shows the login page to guests', function () {
     $this->get('/')
         ->assertOk()
