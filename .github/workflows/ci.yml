@@ -6,6 +6,16 @@ on:
   pull_request: {}
   workflow_call: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   quality:
     name: 🔍 Code style and tests
@@ -25,11 +35,22 @@ jobs:
           extensions: gd, intl, pdo_sqlite, sqlite3, zip
           tools: composer
 
+      - name: 📁 Resolve Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: ♻️ Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('app/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
       - name: 📦 Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: 🛡️ Audit dependencies
-        run: composer audit
+        run: composer audit --no-dev
 
       - name: 🎨 Check code style
         run: vendor/bin/pint --test
