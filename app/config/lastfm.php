@@ -30,12 +30,6 @@ return [
     'locales' => ['en', 'pt-BR', 'fr-FR'],
 
     'images' => [
-        // Artists retried on each lastfm:schedule tick, on top of the ones in the
-        // weekly charts. Lower this if Last.fm starts answering 403/429.
-        'backfill_per_tick' => (int) env('IMAGE_BACKFILL_PER_TICK', 5),
-
-        // Last.fm sometimes serves a stub image; that result expires after this
-        // many days so the artist is attempted again.
         'placeholder_retry_days' => (int) env('IMAGE_PLACEHOLDER_RETRY_DAYS', 30),
     ],
 

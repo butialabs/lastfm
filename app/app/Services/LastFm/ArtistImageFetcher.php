@@ -12,8 +12,10 @@ use Illuminate\Support\Facades\Log;
  * Resolves artist images, coordinating the scraper, the filesystem cache and
  * the artists.image_hash bookkeeping.
  *
- * image_hash holds either the cache hash, the PLACEHOLDER_HASH sentinel (Last.fm
- * served a stub image) or null/'' when nothing has been fetched yet.
+ * image_hash holds either the cache hash, the PLACEHOLDER_HASH sentinel (the
+ * download failed or Last.fm served a stub image) or null/'' when nothing has
+ * been fetched yet. A placeholder is attempted again once it is older than
+ * placeholder_retry_days, the next time the artist shows up in a chart.
  */
 final class ArtistImageFetcher
 {
@@ -47,8 +49,8 @@ final class ArtistImageFetcher
     }
 
     /**
-     * Cached path for an artist, downloading it on a cache miss. Returns '' when
-     * no image could be obtained.
+     * Cached path for an artist, downloading it on a cache miss. A failed
+     * download serves the placeholder ('' only if the placeholder file is missing).
      */
     public function pathFor(string $artistName, ?string $mbid = null): string
     {
@@ -79,59 +81,14 @@ final class ArtistImageFetcher
         $result = $this->fetchAndStore($artistName, $hash);
 
         if ($result === '') {
-            // An expired placeholder that failed to refresh keeps serving the
-            // placeholder; the timestamp restarts the retry window either way.
-            $artist->touch();
+            $this->markPlaceholder($artist);
 
-            return $artist->image_hash === Artist::PLACEHOLDER_HASH && is_file($this->cache->placeholderPath())
-                ? $this->cache->placeholderPath()
-                : '';
+            return is_file($this->cache->placeholderPath()) ? $this->cache->placeholderPath() : '';
         }
 
         $this->rememberHash($artist, $result === $this->cache->placeholderPath() ? Artist::PLACEHOLDER_HASH : $hash);
 
         return $result;
-    }
-
-    /**
-     * Retry the artists that still have no usable image, oldest attempt first.
-     * Runs as a slice on every scheduler tick instead of one daily sweep.
-     *
-     * @return array{attempted:int, succeeded:int}
-     */
-    public function backfill(?int $limit = null): array
-    {
-        $limit ??= (int) config('lastfm.images.backfill_per_tick', 5);
-
-        if ($limit < 1) {
-            return ['attempted' => 0, 'succeeded' => 0];
-        }
-
-        $artists = Artist::query()
-            ->needsImageAttempt($this->placeholderCutoff())
-            ->limit($limit)
-            ->get();
-
-        $succeeded = 0;
-
-        foreach ($artists as $artist) {
-            try {
-                if ($this->regenerate((int) $artist->id)) {
-                    $succeeded++;
-                }
-            } catch (\Throwable $e) {
-                Log::channel('artist_images')->error('Artist image backfill error', [
-                    'artist_id' => $artist->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-
-            // Bump the timestamp whatever the outcome, so a permanently failing
-            // artist does not monopolise every tick.
-            $artist->touch();
-        }
-
-        return ['attempted' => $artists->count(), 'succeeded' => $succeeded];
     }
 
     private function placeholderExpired(Artist $artist): bool
@@ -172,6 +129,7 @@ final class ArtistImageFetcher
                 'artistId' => $artistId,
                 'artist' => $artist->name,
             ]);
+            $this->markPlaceholder($artist);
 
             return false;
         }
@@ -212,6 +170,7 @@ final class ArtistImageFetcher
                 'artist' => $artist->name,
                 'url' => $imageUrl,
             ]);
+            $this->markPlaceholder($artist);
 
             return false;
         }
@@ -262,6 +221,11 @@ final class ArtistImageFetcher
         }
 
         return $this->cache->put($hash, $bin);
+    }
+
+    private function markPlaceholder(Artist $artist): void
+    {
+        $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
     }
 
     private function rememberHash(Artist $artist, string $hash): void

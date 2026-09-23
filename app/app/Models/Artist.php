@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -41,25 +40,6 @@ class Artist extends Model
             'placeholder' => $query->where('image_hash', self::PLACEHOLDER_HASH),
             default => $query,
         };
-    }
-
-    /**
-     * Artists worth another download attempt: never fetched, previously failed,
-     * or holding a placeholder result older than the cutoff. Oldest attempt
-     * first, so repeated failures rotate instead of starving the queue.
-     *
-     * @param  Builder<Artist>  $query
-     */
-    public function scopeNeedsImageAttempt(Builder $query, DateTimeInterface $placeholderCutoff): Builder
-    {
-        return $query
-            ->where(fn (Builder $q) => $q
-                ->whereNull('image_hash')
-                ->orWhere('image_hash', '')
-                ->orWhere(fn (Builder $stale) => $stale
-                    ->where('image_hash', self::PLACEHOLDER_HASH)
-                    ->where('updated_at', '<', $placeholderCutoff)))
-            ->orderBy('updated_at');
     }
 
     public function recordStats(int $userId, int $position, int $playCount): ArtistStat

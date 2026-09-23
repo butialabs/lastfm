@@ -31,12 +31,6 @@ final class UserProcessor
         foreach ($due as $user) {
             $this->processUser($user);
         }
-
-        $backfill = $this->images->backfill();
-
-        if ($backfill['attempted'] > 0) {
-            Log::channel('artist_images')->info('Artist image backfill slice', $backfill);
-        }
     }
 
     public function processUserById(int $userId): bool

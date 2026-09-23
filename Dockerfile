@@ -22,6 +22,9 @@ ENV APP_NAME=LastFM \
 
 RUN install-php-extensions gd intl
 
+COPY --chmod=644 docker/php/zz-opcache-cli.ini /usr/local/etc/php/conf.d/zz-opcache-cli.ini
+RUN mkdir -p /tmp/opcache && chown www-data:www-data /tmp/opcache
+
 COPY --chmod=755 docker/entrypoint.d/ /etc/entrypoint.d/
 COPY --chmod=755 docker/s6-overlay/ /etc/s6-overlay/
 RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/laravel-scheduler

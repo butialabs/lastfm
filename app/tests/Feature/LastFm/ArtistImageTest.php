@@ -55,18 +55,6 @@ it('reads the image url from og:image:secure_url when og:image is absent', funct
     Http::assertSent(fn ($r) => $r->url() === 'https://img.test/secure.jpg');
 });
 
-it('returns an empty path when the artist page has no og:image', function () {
-    fakeArtistPage('<html><head><title>none</title></head></html>');
-
-    expect($this->images->pathFor('Band'))->toBe('');
-});
-
-it('returns an empty path when the artist page is a 404', function () {
-    Http::fake(['https://www.last.fm/music/*' => Http::response('not found', 404)]);
-
-    expect($this->images->pathFor('Band'))->toBe('');
-});
-
 it('caches the downloaded image under md5 of the lowercased name', function () {
     fakeArtistPage('<meta property="og:image" content="https://img.test/a.jpg">', $this->jpeg);
 
@@ -132,7 +120,8 @@ it('reports failure when the explicit url cannot be downloaded', function () {
 
     Http::fake(['https://img.test/*' => Http::response('nope', 404)]);
 
-    expect($this->images->fromUrl((int) $artist->id, 'https://img.test/cover.jpg'))->toBeFalse();
+    expect($this->images->fromUrl((int) $artist->id, 'https://img.test/cover.jpg'))->toBeFalse()
+        ->and($artist->refresh()->image_hash)->toBe(Artist::PLACEHOLDER_HASH);
 });
 
 it('overwrites the cached file when regenerating an artist image', function () {
@@ -147,4 +136,76 @@ it('overwrites the cached file when regenerating an artist image', function () {
 
 it('reports failure when regenerating an unknown artist', function () {
     expect($this->images->regenerate(999))->toBeFalse();
+});
+
+it('stores the placeholder when the artist page cannot be found', function () {
+    Http::fake(['https://www.last.fm/music/*' => Http::response('gone', 404)]);
+
+    expect($this->images->pathFor('Unknown'))->toBe(public_path('images/placeholder.jpg'))
+        ->and(Artist::where('name', 'Unknown')->first()->image_hash)->toBe(Artist::PLACEHOLDER_HASH);
+});
+
+it('stores the placeholder when the page has no image', function () {
+    fakeArtistPage('<html><head></head></html>');
+
+    expect($this->images->pathFor('NoImage'))->toBe(public_path('images/placeholder.jpg'))
+        ->and(Artist::where('name', 'NoImage')->first()->image_hash)->toBe(Artist::PLACEHOLDER_HASH);
+});
+
+it('stores the placeholder when the image binary cannot be downloaded', function () {
+    Http::fake([
+        'https://www.last.fm/music/*' => Http::response('<meta property="og:image" content="https://img.test/a.jpg">'),
+        'https://img.test/*' => Http::response('', 500),
+    ]);
+
+    expect($this->images->pathFor('Broken'))->toBe(public_path('images/placeholder.jpg'))
+        ->and(Artist::where('name', 'Broken')->first()->image_hash)->toBe(Artist::PLACEHOLDER_HASH);
+});
+
+it('does not re-scrape a failed artist while the placeholder is fresh', function () {
+    Http::fake(['https://www.last.fm/music/*' => Http::response('gone', 404)]);
+    $this->images->pathFor('Unknown');
+
+    Http::fake();
+
+    expect($this->images->pathFor('Unknown'))->toBe(public_path('images/placeholder.jpg'));
+    Http::assertNothingSent();
+});
+
+it('restarts the retry window when an expired placeholder fails again', function () {
+    $artist = Artist::factory()->create([
+        'name' => 'Stale',
+        'image_hash' => Artist::PLACEHOLDER_HASH,
+        'updated_at' => now()->subDays(31),
+    ]);
+
+    Http::fake(['https://www.last.fm/music/*' => Http::response('gone', 404)]);
+
+    expect($this->images->pathFor('Stale'))->toBe(public_path('images/placeholder.jpg'))
+        ->and($artist->refresh()->image_hash)->toBe(Artist::PLACEHOLDER_HASH)
+        ->and($artist->updated_at->isToday())->toBeTrue();
+});
+
+it('replaces an expired placeholder when the retry succeeds', function () {
+    $artist = Artist::factory()->create([
+        'name' => 'Stale',
+        'image_hash' => Artist::PLACEHOLDER_HASH,
+        'updated_at' => now()->subDays(31),
+    ]);
+
+    fakeArtistPage('<meta property="og:image" content="https://img.test/a.jpg">', $this->jpeg);
+
+    $this->images->pathFor('Stale');
+
+    expect($artist->refresh()->image_hash)->toBe(md5('stale'));
+});
+
+it('stores the placeholder when regenerating fails', function () {
+    $artist = Artist::factory()->create(['name' => 'Band', 'image_hash' => md5('band')]);
+    Storage::disk('artist-cache')->put(md5('band').'.jpg', $this->jpeg);
+
+    Http::fake(['https://www.last.fm/music/*' => Http::response('gone', 404)]);
+
+    expect($this->images->regenerate((int) $artist->id))->toBeFalse()
+        ->and($artist->refresh()->image_hash)->toBe(Artist::PLACEHOLDER_HASH);
 });

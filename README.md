@@ -62,8 +62,7 @@ docker compose up -d
 | `THEAUDIODB_API_KEY` / `FANART_API_KEY` | Alternative artist image providers for the admin panel | No |
 | `MAX_ERROR_COUNT` | Send attempts before giving up until next week (default `3`) | No |
 | `BLUESKY_MENTION` / `MASTODON_MENTION` | Account mentioned in generated posts (defaults to the Butiá Labs accounts) | No |
-| `IMAGE_BACKFILL_PER_TICK` | Artists retried per scheduler tick (default `5`, see below) | No |
-| `IMAGE_PLACEHOLDER_RETRY_DAYS` | Days before a placeholder result is attempted again (default `30`) | No |
+| `IMAGE_PLACEHOLDER_RETRY_DAYS` | Days before a placeholder (failed or stub download) is attempted again, when the artist next shows up in a chart (default `30`) | No |
 
 The base image's own variables (`PHP_OPCACHE_*`, `NGINX_*`, `SSL_MODE`, `AUTORUN_*`, ...) are documented in the [serversideup/php reference](https://serversideup.net/open-source/docker-php/docs/reference/environment-variable-specification).
 
@@ -128,7 +127,6 @@ composer test
 
 ```bash
 # Process scheduled users (generate montages, mark as QUEUED)
-# and retry a slice of artist images still missing one
 php artisan lastfm:schedule
 
 # Process the queue (send posts to Bluesky/Mastodon)
