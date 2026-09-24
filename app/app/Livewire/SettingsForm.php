@@ -87,6 +87,7 @@ class SettingsForm extends Component
                 'timezone' => $this->timezone,
                 'status' => User::STATUS_SCHEDULE,
                 'error_count' => 0,
+                'send_attempts' => 0,
             ])->save();
         } catch (\Throwable $e) {
             Log::channel('app')->error('Saving settings failed', ['error' => $e->getMessage()]);

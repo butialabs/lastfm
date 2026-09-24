@@ -13,8 +13,11 @@ return [
     // to decrypt legacy credentials before re-encrypting them with APP_KEY.
     'encryption_key' => env('ENCRYPTION_KEY'),
 
-    // Consecutive failures before giving up until next week (user returns to SCHEDULE).
+    // Consecutive failed weeks before the user is set to ERROR and stops being
+    // scheduled. Reset by a successful send, a panel visit or saving settings.
     'max_error_count' => (int) env('MAX_ERROR_COUNT', 3),
+
+    'max_send_attempts' => (int) env('MAX_SEND_ATTEMPTS', 3),
 
     // Initial seed — see database/seeders/AdminSeeder.php.
     'admin' => [

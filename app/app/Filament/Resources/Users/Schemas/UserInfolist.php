@@ -33,6 +33,7 @@ class UserInfolist
                     ->url(fn ($state): ?string => $state)
                     ->openUrlInNewTab(),
                 TextEntry::make('error_count'),
+                TextEntry::make('send_attempts'),
                 TextEntry::make('created_at')->dateTime('Y-m-d H:i:s'),
                 TextEntry::make('updated_at')->dateTime('Y-m-d H:i:s'),
             ])

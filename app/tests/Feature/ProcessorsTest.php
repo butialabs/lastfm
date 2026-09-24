@@ -89,6 +89,51 @@ it('marks error with SCHEDULE retry status when the chart fails', function () {
         ->and($user->error_count)->toBe(1);
 });
 
+it('moves the user to ERROR after MAX_ERROR_COUNT consecutive failed weeks', function () {
+    config(['lastfm.max_error_count' => 3]);
+
+    $now = CarbonImmutable::parse('2026-07-24 12:30:00', 'UTC');
+    $user = User::factory()->scheduled()->create([
+        'lastfm_username' => 'alice',
+        'day_of_week' => 5,
+        'time' => '12:30:00',
+        'error_count' => 2,
+    ]);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response('Server Error', 500),
+    ]);
+
+    expect(app(UserProcessor::class)->processUser($user))->toBeFalse();
+
+    $user->refresh();
+    expect($user->status)->toBe(User::STATUS_ERROR)
+        ->and($user->error_count)->toBe(3)
+        ->and($user->callback)->toContain('Disabled after 3 consecutive failed weeks')
+        ->and(User::dueForSchedule($now))->toHaveCount(0);
+
+    $user->resetOnAccess();
+
+    $user->refresh();
+    expect($user->status)->toBe(User::STATUS_SCHEDULE)
+        ->and($user->error_count)->toBe(0)
+        ->and(User::dueForSchedule($now))->toHaveCount(1);
+});
+
+it('does not count a week without chart data as an error', function () {
+    $user = User::factory()->scheduled()->create(['lastfm_username' => 'alice']);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(['weeklyartistchart' => ['artist' => []]]),
+    ]);
+
+    expect(app(UserProcessor::class)->processUser($user))->toBeFalse();
+
+    $user->refresh();
+    expect($user->status)->toBe(User::STATUS_SCHEDULE)
+        ->and($user->error_count)->toBe(0);
+});
+
 it('selects users due for schedule at the exact UTC minute', function () {
     // Now: Friday (5) 12:30 UTC
     $now = CarbonImmutable::parse('2026-07-24 12:30:00', 'UTC');
@@ -192,10 +237,10 @@ it('sends to Mastodon with media attached to the first status', function () {
     Http::assertSent(fn ($request) => str_contains($request->url(), '/api/v1/statuses'));
 });
 
-it('requeues on temporary failure and gives up after MAX_ERROR_COUNT', function () {
-    config(['lastfm.max_error_count' => 3]);
+it('requeues on temporary failure and gives up the week after MAX_SEND_ATTEMPTS', function () {
+    config(['lastfm.max_send_attempts' => 3, 'lastfm.max_error_count' => 3]);
 
-    $user = makeQueuedUser($this->jpegBinary);
+    $user = makeQueuedUser($this->jpegBinary, ['error_count' => 1]);
 
     // createSession always fails (401 with no valid JSON)
     Http::fake([
@@ -205,20 +250,47 @@ it('requeues on temporary failure and gives up after MAX_ERROR_COUNT', function 
 
     $processor = app(QueueProcessor::class);
 
-    // Failures 1 and 2 → back to QUEUED
+    // Attempts 1 and 2 → back to QUEUED, the weekly error count is untouched
     expect($processor->sendForUser($user))->toBeFalse();
     expect($user->refresh()->status)->toBe(User::STATUS_QUEUED)
+        ->and($user->send_attempts)->toBe(1)
         ->and($user->error_count)->toBe(1);
 
     expect($processor->sendForUser($user))->toBeFalse();
     expect($user->refresh()->status)->toBe(User::STATUS_QUEUED)
-        ->and($user->error_count)->toBe(2);
+        ->and($user->send_attempts)->toBe(2)
+        ->and($user->error_count)->toBe(1);
 
-    // Failure 3 → gives up until next week (SCHEDULE)
+    // Attempt 3 → gives up until next week (SCHEDULE), one more failed week
     expect($processor->sendForUser($user))->toBeFalse();
     expect($user->refresh()->status)->toBe(User::STATUS_SCHEDULE)
-        ->and($user->error_count)->toBe(3)
+        ->and($user->send_attempts)->toBe(0)
+        ->and($user->error_count)->toBe(2)
         ->and($user->callback)->toContain('Giving up until next week');
+});
+
+it('resets the failed weeks after a successful send', function () {
+    $user = makeQueuedUser($this->jpegBinary, [
+        'protocol' => User::PROTOCOL_MASTODON,
+        'instance' => 'https://mastodon.social',
+        'username' => 'bob',
+        'password' => null,
+        'token' => Crypt::encryptString('mastodon-token'),
+        'error_count' => 2,
+        'send_attempts' => 1,
+    ]);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response($this->weeklyChart),
+        'https://mastodon.social/api/v2/media' => Http::response(['id' => 'media-1']),
+        'https://mastodon.social/api/v1/statuses' => Http::response(['id' => 'status-1']),
+    ]);
+
+    expect(app(QueueProcessor::class)->sendForUser($user))->toBeTrue();
+
+    $user->refresh();
+    expect($user->error_count)->toBe(0)
+        ->and($user->send_attempts)->toBe(0);
 });
 
 it('fails when the montage file is missing', function () {
@@ -234,5 +306,6 @@ it('fails when the montage file is missing', function () {
     $processor = app(QueueProcessor::class);
     expect($processor->sendForUser($user))->toBeFalse();
 
-    expect($user->refresh()->error_count)->toBe(1);
+    expect($user->refresh()->send_attempts)->toBe(1)
+        ->and($user->error_count)->toBe(0);
 });

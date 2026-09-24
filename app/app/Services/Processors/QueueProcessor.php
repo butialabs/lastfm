@@ -117,12 +117,9 @@ final class QueueProcessor
                 'error' => $e->getMessage(),
             ]);
 
-            $maxErrors = (int) config('lastfm.max_error_count', 3);
-            $newCount = $user->refresh()->incrementError($e->getMessage(), temporary: true);
-            if ($newCount >= $maxErrors) {
-                $user->markScheduledAfterGiveUp($e->getMessage());
-            } else {
-                $user->markQueued((string) ($user->social_montage ?? ''));
+            $attempts = $user->refresh()->registerSendAttemptFailure($e->getMessage());
+            if ($attempts >= (int) config('lastfm.max_send_attempts', 3)) {
+                $user->registerWeeklyFailure('Giving up until next week: '.$e->getMessage());
             }
 
             return false;

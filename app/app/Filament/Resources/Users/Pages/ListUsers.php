@@ -26,7 +26,7 @@ class ListUsers extends ListRecords
                 ->action(function (): void {
                     $affected = User::query()
                         ->where('status', User::STATUS_ERROR)
-                        ->update(['status' => User::STATUS_SCHEDULE, 'error_count' => 0]);
+                        ->update(['status' => User::STATUS_SCHEDULE, 'error_count' => 0, 'send_attempts' => 0]);
 
                     Notification::make()
                         ->title("{$affected} user(s) restored")

@@ -79,7 +79,7 @@ final class UserProcessor
 
             $montagePath = $this->montage->createWeeklyMontage($userId, $paths);
 
-            $user->refresh()->markQueued($montagePath);
+            $user->refresh()->markQueued($montagePath, resetAttempts: true);
             $user->setCallback('Queued successfully');
 
             return true;
@@ -88,7 +88,7 @@ final class UserProcessor
                 'user_id' => $userId,
                 'error' => $e->getMessage(),
             ]);
-            $user->incrementError($e->getMessage(), temporary: true, retryStatus: User::STATUS_SCHEDULE);
+            $user->refresh()->registerWeeklyFailure($e->getMessage());
 
             return false;
         }

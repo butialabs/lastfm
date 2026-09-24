@@ -11,6 +11,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class UsersTable
 {
@@ -56,8 +57,11 @@ class UsersTable
                 TextColumn::make('schedule')
                     ->label('Schedule')
                     ->state(fn (User $record): string => $record->day_of_week && $record->time
-                        ? __('messages.day.'.['', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][$record->day_of_week] ?? 'sunday').' '.substr((string) $record->time, 0, 5).' UTC'
-                        : '—'),
+                        ? __('messages.day.'.(User::DAYS[$record->day_of_week] ?? 'sunday')).' '.substr((string) $record->time, 0, 5).' UTC'
+                        : '—')
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderBy('day_of_week', $direction)
+                        ->orderBy('time', $direction)),
                 TextColumn::make('updated_at')
                     ->dateTime('Y-m-d H:i')
                     ->sortable()
@@ -77,6 +81,11 @@ class UsersTable
                         User::STATUS_SENDING => 'Sending',
                         User::STATUS_ERROR => 'Error',
                     ]),
+                SelectFilter::make('day_of_week')
+                    ->label('Schedule day (UTC)')
+                    ->options(collect(User::DAYS)
+                        ->map(fn (string $day): string => __('messages.day.'.$day))
+                        ->all()),
                 SelectFilter::make('language')
                     ->options([
                         'en' => 'English',
@@ -96,6 +105,7 @@ class UsersTable
                         $record->forceFill([
                             'status' => User::STATUS_QUEUED,
                             'error_count' => 0,
+                            'send_attempts' => 0,
                         ])->save();
 
                         Notification::make()

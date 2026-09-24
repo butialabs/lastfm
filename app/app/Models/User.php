@@ -48,6 +48,7 @@ class User extends Authenticatable
         'social_message',
         'social_montage',
         'error_count',
+        'send_attempts',
     ];
 
     protected $hidden = [
@@ -60,6 +61,7 @@ class User extends Authenticatable
         return [
             'day_of_week' => 'integer',
             'error_count' => 'integer',
+            'send_attempts' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -114,14 +116,16 @@ class User extends Authenticatable
 
     /*
      * Send state machine: ACTIVE → SCHEDULE → QUEUED → SENDING → SCHEDULE
-     * (with ERROR/retry branches driven by error_count).
+     * send_attempts drives the retries within a week; error_count counts
+     * consecutive failed weeks and moves the user to ERROR at the limit.
      */
 
-    public function markQueued(string $montagePath): void
+    public function markQueued(string $montagePath, bool $resetAttempts = false): void
     {
         $this->forceFill([
             'status' => self::STATUS_QUEUED,
             'social_montage' => $montagePath,
+            ...($resetAttempts ? ['send_attempts' => 0] : []),
         ])->save();
     }
 
@@ -136,26 +140,38 @@ class User extends Authenticatable
             'status' => self::STATUS_SCHEDULE,
             'social_message' => $socialMessage,
             'error_count' => 0,
+            'send_attempts' => 0,
         ])->save();
     }
 
-    public function markScheduledAfterGiveUp(string $reason): void
+    // A failed send attempt within the week: stays QUEUED for the next tick.
+    public function registerSendAttemptFailure(string $message): int
     {
         $this->forceFill([
-            'status' => self::STATUS_SCHEDULE,
-            'callback' => 'Giving up until next week: '.$reason,
-        ])->save();
-    }
-
-    public function incrementError(string $message, bool $temporary, string $retryStatus = self::STATUS_QUEUED): int
-    {
-        $this->forceFill([
-            'status' => $temporary ? $retryStatus : self::STATUS_ERROR,
+            'status' => self::STATUS_QUEUED,
             'callback' => $message,
-            'error_count' => ($this->error_count ?? 0) + 1,
+            'send_attempts' => ((int) $this->send_attempts) + 1,
         ])->save();
 
-        return (int) $this->error_count;
+        return (int) $this->send_attempts;
+    }
+
+    // The whole week failed: back to SCHEDULE, or ERROR after too many weeks in a row.
+    public function registerWeeklyFailure(string $message): int
+    {
+        $errorCount = ((int) $this->error_count) + 1;
+        $disabled = $errorCount >= (int) config('lastfm.max_error_count', 3);
+
+        $this->forceFill([
+            'status' => $disabled ? self::STATUS_ERROR : self::STATUS_SCHEDULE,
+            'callback' => $disabled
+                ? "Disabled after {$errorCount} consecutive failed weeks: {$message}"
+                : $message,
+            'error_count' => $errorCount,
+            'send_attempts' => 0,
+        ])->save();
+
+        return $errorCount;
     }
 
     public function setCallback(string $message): void
@@ -170,11 +186,11 @@ class User extends Authenticatable
             ? self::STATUS_SCHEDULE
             : $this->status;
 
-        if ((int) $this->error_count === 0 && $newStatus === $this->status) {
+        if ((int) $this->error_count === 0 && (int) $this->send_attempts === 0 && $newStatus === $this->status) {
             return;
         }
 
-        $this->forceFill(['error_count' => 0, 'status' => $newStatus])->save();
+        $this->forceFill(['error_count' => 0, 'send_attempts' => 0, 'status' => $newStatus])->save();
     }
 
     /**
