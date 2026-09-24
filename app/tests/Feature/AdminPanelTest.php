@@ -61,6 +61,18 @@ it('lists users with filters and actions', function () {
         ->assertCanSeeTableRecords(User::all());
 });
 
+it('filters users by schedule day', function () {
+    $wednesday = User::factory()->scheduled()->count(2)->create(['day_of_week' => 3]);
+    $friday = User::factory()->scheduled()->create(['day_of_week' => 5]);
+
+    $this->actingAs($this->admin, 'admin');
+
+    Livewire::test(ListUsers::class)
+        ->filterTable('day_of_week', 3)
+        ->assertCanSeeTableRecords($wednesday)
+        ->assertCanNotSeeTableRecords([$friday]);
+});
+
 it('force-sends a user (requeue)', function () {
     $user = User::factory()->create(['status' => User::STATUS_ERROR, 'error_count' => 3]);
 
