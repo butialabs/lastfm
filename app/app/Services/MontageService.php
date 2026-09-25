@@ -14,7 +14,7 @@ final class MontageService
 
     public function __construct()
     {
-        $this->images = ImageManager::gd();
+        $this->images = ImageManager::gd(decodeAnimation: false);
     }
 
     /**
@@ -55,7 +55,7 @@ final class MontageService
 
     private function placeImage(ImageInterface $canvas, string $path, int $x, int $y, int $width, int $height): void
     {
-        if ($path !== '' && is_file($path)) {
+        if ($path !== '' && is_file($path) && $this->fitsInMemory($path)) {
             $img = $this->images->read($path);
             $img = $img->cover($width, $height);
             $canvas->place($img, 'top-left', $x, $y);
@@ -63,5 +63,12 @@ final class MontageService
             $block = $this->images->create($width, $height)->fill('#243b55');
             $canvas->place($block, 'top-left', $x, $y);
         }
+    }
+
+    private function fitsInMemory(string $path): bool
+    {
+        $size = @getimagesize($path);
+
+        return $size !== false && $size[0] * $size[1] <= 25_000_000;
     }
 }
