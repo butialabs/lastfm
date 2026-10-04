@@ -5,6 +5,8 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Livewire\Features\SupportFileUploads\MissingFileUploadsTraitException;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -25,6 +27,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontReport([
+            CannotUpdateLockedPropertyException::class,
+            MissingFileUploadsTraitException::class,
+        ]);
+
+        $exceptions->dontReportWhen(fn (Throwable $e): bool => $e instanceof TypeError
+            && str_contains(str_replace('\\', '/', $e->getFile()), '/vendor/filament/notifications/src/Collection.php'));
+
         Integration::handles($exceptions);
     })
     ->create();
