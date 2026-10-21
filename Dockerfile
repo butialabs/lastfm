@@ -26,12 +26,12 @@ COPY --chmod=644 docker/php/zz-opcache-cli.ini /usr/local/etc/php/conf.d/zz-opca
 RUN mkdir -p /tmp/opcache && chown www-data:www-data /tmp/opcache
 
 COPY --chmod=755 docker/entrypoint.d/ /etc/entrypoint.d/
-COPY --chmod=755 docker/s6-overlay/ /etc/s6-overlay/
-RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d /etc/s6-overlay/s6-rc.d/user2/contents.d \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/laravel-scheduler \
-    && echo bundle > /etc/s6-overlay/s6-rc.d/user/type \
-    && echo bundle > /etc/s6-overlay/s6-rc.d/user2/type \
-    && chown -R www-data:www-data /etc/s6-overlay/s6-rc.d/user /etc/s6-overlay/s6-rc.d/user2
+
+COPY --chmod=755 docker/s6-overlay/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
+RUN mkdir -p /etc/s6-overlay/user-bundles.d/user/contents.d \
+    && echo bundle > /etc/s6-overlay/user-bundles.d/user/type \
+    && touch /etc/s6-overlay/user-bundles.d/user/contents.d/laravel-scheduler \
+    && chown -R www-data:www-data /etc/s6-overlay/user-bundles.d/user
 
 USER www-data
 WORKDIR /app
