@@ -27,8 +27,11 @@ RUN mkdir -p /tmp/opcache && chown www-data:www-data /tmp/opcache
 
 COPY --chmod=755 docker/entrypoint.d/ /etc/entrypoint.d/
 COPY --chmod=755 docker/s6-overlay/ /etc/s6-overlay/
-RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/laravel-scheduler
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d /etc/s6-overlay/s6-rc.d/user2/contents.d \
+    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/laravel-scheduler \
+    && echo bundle > /etc/s6-overlay/s6-rc.d/user/type \
+    && echo bundle > /etc/s6-overlay/s6-rc.d/user2/type \
+    && chown -R www-data:www-data /etc/s6-overlay/s6-rc.d/user /etc/s6-overlay/s6-rc.d/user2
 
 USER www-data
 WORKDIR /app
