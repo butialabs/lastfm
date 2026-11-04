@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use App\Models\Config;
 use App\Models\User;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
@@ -21,15 +20,12 @@ class AppServiceProvider extends ServiceProvider
         View::composer('layouts.app', function ($view) {
             try {
                 $totalUsers = User::count();
-                $analyticsScript = Config::getValue('analytics_script');
             } catch (\Throwable) {
                 // Database not migrated yet (first boot).
                 $totalUsers = 0;
-                $analyticsScript = null;
             }
 
-            $view->with('totalUsers', $totalUsers)
-                ->with('analyticsScript', $analyticsScript);
+            $view->with('totalUsers', $totalUsers);
         });
     }
 }

@@ -58,6 +58,4 @@ return [
     'error.invalid_timezone' => 'Invalid timezone.',
     'error.invalid_time' => 'Invalid time format.',
     'error.generic' => 'Something went wrong.',
-
-    'admin.config.saved' => 'Settings saved successfully.',
 ];

@@ -56,7 +56,6 @@ class ImportLegacyCommand extends Command
             'users' => $this->importUsers($legacyCrypto),
             'artists' => $this->importSimple('artists', ['created_at', 'updated_at']),
             'artist_stats' => $this->importSimple('artist_stats', ['recorded_at']),
-            'config' => $this->importConfig(),
         ];
 
         foreach ($stats as $table => $count) {
@@ -83,7 +82,6 @@ class ImportLegacyCommand extends Command
         DB::table('artist_stats')->delete();
         DB::table('users')->delete();
         DB::table('artists')->delete();
-        DB::table('config')->delete();
         Schema::enableForeignKeyConstraints();
     }
 
@@ -148,22 +146,6 @@ class ImportLegacyCommand extends Command
                 }
             });
         });
-
-        return $imported;
-    }
-
-    private function importConfig(): int
-    {
-        if (! Schema::connection('legacy')->hasTable('config')) {
-            return 0;
-        }
-
-        $imported = 0;
-
-        foreach (DB::connection('legacy')->table('config')->get() as $row) {
-            DB::table('config')->updateOrInsert(['key' => $row->key], ['value' => $row->value]);
-            $imported++;
-        }
 
         return $imported;
     }

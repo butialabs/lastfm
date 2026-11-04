@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Models\Artist;
 use App\Models\ArtistStat;
-use App\Models\Config as ConfigModel;
 use App\Models\User;
 use App\Services\Crypto\LegacyCryptoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -144,11 +143,6 @@ function seedLegacyDatabase(LegacyCryptoService $crypto): void
         'play_count' => 42,
         'recorded_at' => '2026-04-13 05:00:00',
     ]);
-
-    DB::connection('legacy')->table('config')->insert([
-        'key' => 'analytics_script',
-        'value' => '<script>analytics</script>',
-    ]);
 }
 
 it('imports the legacy database preserving ids and converting crypto and timestamps', function () {
@@ -181,8 +175,6 @@ it('imports the legacy database preserving ids and converting crypto and timesta
     expect($stat)->not->toBeNull()
         ->and($stat->user_id)->toBe(7)
         ->and($stat->recorded_at->format('Y-m-d H:i:s'))->toBe('2026-04-13 05:00:00');
-
-    expect(ConfigModel::getValue('analytics_script'))->toBe('<script>analytics</script>');
 
     // Legacy database renamed (backup) → command becomes a no-op
     expect(file_exists($this->legacyPath))->toBeFalse()

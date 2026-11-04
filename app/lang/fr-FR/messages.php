@@ -58,6 +58,4 @@ return [
     'error.invalid_timezone' => 'Fuseau horaire invalide.',
     'error.invalid_time' => 'Format de l\'heure invalide.',
     'error.generic' => 'Une erreur est survenue.',
-
-    'admin.config.saved' => 'Paramètres enregistrés avec succès.',
 ];

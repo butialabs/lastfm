@@ -58,6 +58,4 @@ return [
     'error.invalid_timezone' => 'Timezone inválida.',
     'error.invalid_time' => 'Formato de horário inválido.',
     'error.generic' => 'Algo deu errado.',
-
-    'admin.config.saved' => 'Configurações salvas com sucesso.',
 ];
