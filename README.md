@@ -112,11 +112,12 @@ The bucket can stay private: images are served through the app (`/montage/{hash}
 To move an existing installation, run once after switching:
 
 ```bash
-php artisan images:migrate --normalize            # copy data/ images to S3, converting the cache to WebP
-php artisan images:migrate --normalize --delete-source   # same, removing the local copies
+php artisan lastfm:files s3                    # copy data/ images (montages + caches) to the bucket
+php artisan lastfm:files s3 --delete-source    # same, removing the local copies
+php artisan lastfm:files normalize-cache       # convert the existing cache to WebP (local or S3)
 ```
 
-With `IMAGE_STORAGE=local`, `images:migrate --normalize` converts the existing cache in place. Without it, old `.jpg` cache entries are also converted on first use.
+`normalize-cache` works on the configured storage (the bucket when `IMAGE_STORAGE=s3`), so run it after `s3`. It also works on local-only installs. Without it, old `.jpg` cache entries are converted on first use.
 
 ### Persistent Data
 
@@ -166,8 +167,11 @@ php artisan lastfm:send
 # Force process + send for a single user
 php artisan lastfm:force-send {user_id}
 
-# Copy local images to the configured storage / normalize the image cache
-php artisan images:migrate [--normalize] [--delete-source]
+# Copy local images to S3 (IMAGE_STORAGE=s3)
+php artisan lastfm:files s3 [--delete-source]
+
+# Convert the image cache to the standard format (WebP, square, resized)
+php artisan lastfm:files normalize-cache
 ```
 
 Outside Docker, run the scheduler yourself:
