@@ -63,6 +63,10 @@ docker compose up -d
 | `MAX_ERROR_COUNT` | Send attempts before giving up until next week (default `3`) | No |
 | `BLUESKY_MENTION` / `MASTODON_MENTION` | Account mentioned in generated posts (defaults to the Butiá Labs accounts) | No |
 | `IMAGE_PLACEHOLDER_RETRY_DAYS` | Days before a placeholder (failed or stub download) is attempted again, when the artist next shows up in a chart (default `30`) | No |
+| `IMAGE_STORAGE` | Where montages and cached artist/album images are stored: `local` (default, the data volume) or `s3` | No |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_BUCKET` / `AWS_DEFAULT_REGION` | S3 credentials and bucket, used when `IMAGE_STORAGE=s3` | With S3 |
+| `AWS_ENDPOINT` / `AWS_USE_PATH_STYLE_ENDPOINT` | Custom endpoint for S3-compatible services (Cloudflare R2, MinIO, ...). MinIO usually needs path-style `true` | No |
+| `AWS_ROOT` | Optional key prefix inside the bucket (objects go to `{AWS_ROOT}/montage`, `/artists`, `/albums`) | No |
 
 The base image's own variables (`PHP_OPCACHE_*`, `NGINX_*`, `SSL_MODE`, `AUTORUN_*`, ...) are documented in the [serversideup/php reference](https://serversideup.net/open-source/docker-php/docs/reference/environment-variable-specification).
 
@@ -86,6 +90,34 @@ In 2019, Last.fm removed the image API, so artist images have to be scraped from
 ```env
 LASTFM_PROXY_URL=http://user:pass@host:port
 ```
+
+### Image storage (S3)
+
+Every downloaded image (artist photos and album covers) is center-cropped to a square, resized to at most 600px and re-encoded as WebP without metadata, which keeps the cache small. Montages are still JPEG (kept under 1MB for Bluesky).
+
+By default everything lives in the data volume. To use S3 or an S3-compatible service:
+
+```yaml
+    environment:
+      IMAGE_STORAGE: s3
+      AWS_ACCESS_KEY_ID: ...
+      AWS_SECRET_ACCESS_KEY: ...
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_BUCKET: lastfm-images
+      # AWS_ENDPOINT: https://<account>.r2.cloudflarestorage.com
+      # AWS_USE_PATH_STYLE_ENDPOINT: "true"   # MinIO
+```
+
+The bucket can stay private: images are served through the app (`/montage/{hash}`) and read server side.
+
+To move an existing installation, run once after switching:
+
+```bash
+php artisan images:migrate --normalize            # copy data/ images to S3, converting the cache to WebP
+php artisan images:migrate --normalize --delete-source   # same, removing the local copies
+```
+
+With `IMAGE_STORAGE=local`, `images:migrate --normalize` converts the existing cache in place. Without it, old `.jpg` cache entries are also converted on first use.
 
 ### Persistent Data
 
