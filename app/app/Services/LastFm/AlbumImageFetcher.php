@@ -134,7 +134,28 @@ final class AlbumImageFetcher
             return self::FAILED;
         }
 
-        $bin = $this->scraper->download($imageUrl, $album->artist_name, 'album-cover');
+        $original = self::originalSizeUrl($imageUrl);
+        if ($original !== null && $this->downloadAndStore($original, $album, $hash, $context) === self::STORED) {
+            return self::STORED;
+        }
+
+        return $this->downloadAndStore($imageUrl, $album, $hash, $context);
+    }
+
+    public static function originalSizeUrl(string $url): ?string
+    {
+        $original = preg_replace('#/i/u/(?:\d+x\d+|\d+s)/#', '/i/u/', $url, 1, $count);
+
+        return $count === 1 ? $original : null;
+    }
+
+    /**
+     * @param  array<string,string>  $context
+     * @return self::STORED|self::PLACEHOLDER|self::FAILED
+     */
+    private function downloadAndStore(string $url, Album $album, string $hash, array $context): string
+    {
+        $bin = $this->scraper->download($url, $album->artist_name, 'album-cover');
         if ($bin === null) {
             return self::FAILED;
         }
@@ -146,7 +167,7 @@ final class AlbumImageFetcher
         try {
             $this->cache->put($hash, $bin);
         } catch (\RuntimeException $e) {
-            Log::channel('artist_images')->warning('Album cover could not be stored', $context + ['error' => $e->getMessage()]);
+            Log::channel('artist_images')->warning('Album cover could not be stored', $context + ['url' => $url, 'error' => $e->getMessage()]);
 
             return self::FAILED;
         }
