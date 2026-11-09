@@ -63,6 +63,58 @@ final class AlbumImageFetcher
         return $this->cache->get($hash);
     }
 
+    public function cachedImage(Album $album): ?string
+    {
+        if ($album->image_hash === Album::PLACEHOLDER_HASH) {
+            return $this->cache->placeholderBytes();
+        }
+
+        return $this->cache->get($this->cache->hashFor($album->artist_name, $album->name));
+    }
+
+    public function regenerate(Album $album): bool
+    {
+        $hash = $this->cache->hashFor($album->artist_name, $album->name);
+        $this->cache->forget($hash);
+
+        $outcome = $this->fetchAndStore($album, $hash);
+        $this->rememberHash($album, $outcome === self::STORED ? $hash : Album::PLACEHOLDER_HASH);
+
+        Log::channel('artist_images')->info('Album cover download', [
+            'artist' => $album->artist_name,
+            'album' => $album->name,
+            'outcome' => $outcome,
+        ]);
+
+        return $outcome !== self::FAILED;
+    }
+
+    public function fromUrl(Album $album, string $imageUrl): bool
+    {
+        $hash = $this->cache->hashFor($album->artist_name, $album->name);
+        $bin = $this->scraper->download($imageUrl, $album->artist_name, 'album-cover-url');
+
+        if ($bin === null || $this->cache->isPlaceholder($bin)) {
+            return false;
+        }
+
+        try {
+            $this->cache->put($hash, $bin);
+        } catch (\RuntimeException $e) {
+            Log::channel('artist_images')->warning('Album cover from URL could not be stored', [
+                'album' => $album->name,
+                'url' => $imageUrl,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        $this->rememberHash($album, $hash);
+
+        return true;
+    }
+
     /**
      * @return self::STORED|self::PLACEHOLDER|self::FAILED
      */

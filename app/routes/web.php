@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\AlbumImageController;
 use App\Http\Controllers\Admin\ArtistImageController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\LocaleController;
@@ -22,7 +23,11 @@ Route::get('/montage/{hash}', [MontageController::class, 'show'])
     ->where('hash', '[a-fA-F0-9]{32}')
     ->name('montage');
 
-// Cached artist images, consumed by the Filament panel.
+// Cached artist images and album covers, consumed by the Filament panel.
 Route::get('/admin/artists/{artist}/image', [ArtistImageController::class, 'show'])
     ->middleware('auth:admin')
     ->name('admin.artists.image');
+
+Route::get('/admin/albums/{album}/image', [AlbumImageController::class, 'show'])
+    ->middleware('auth:admin')
+    ->name('admin.albums.image');

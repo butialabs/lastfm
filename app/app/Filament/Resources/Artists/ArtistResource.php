@@ -6,6 +6,7 @@ namespace App\Filament\Resources\Artists;
 
 use App\Filament\Resources\Artists\Pages\ListArtists;
 use App\Filament\Resources\Artists\Pages\ViewArtist;
+use App\Filament\Resources\Artists\RelationManagers\AlbumsRelationManager;
 use App\Filament\Resources\Artists\RelationManagers\StatsRelationManager;
 use App\Filament\Resources\Artists\Schemas\ArtistInfolist;
 use App\Filament\Resources\Artists\Tables\ArtistsTable;
@@ -37,6 +38,7 @@ class ArtistResource extends Resource
     public static function getRelations(): array
     {
         return [
+            AlbumsRelationManager::class,
             StatsRelationManager::class,
         ];
     }

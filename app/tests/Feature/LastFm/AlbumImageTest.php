@@ -96,3 +96,29 @@ it('parses the weekly album chart, including the single-object form', function (
         'total_scrobbles' => 12,
     ]);
 });
+
+it('re-downloads a cover on regenerate, replacing a placeholder', function () {
+    $album = Album::create(['artist_name' => 'Radiohead', 'name' => 'OK Computer', 'image_hash' => Album::PLACEHOLDER_HASH]);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(albumInfo('https://img.test/cover.jpg')),
+        'https://img.test/*' => Http::response($this->cover),
+    ]);
+
+    expect($this->images->regenerate($album))->toBeTrue()
+        ->and($album->refresh()->image_hash)->toBe(md5('radiohead|ok computer'))
+        ->and(getimagesizefromstring($this->images->cachedImage($album))['mime'])->toBe('image/webp');
+});
+
+it('sets a cover from a URL and keeps the current one when it fails', function () {
+    $album = Album::create(['artist_name' => 'Radiohead', 'name' => 'Kid A']);
+
+    Http::fake(['https://img.test/good.jpg' => Http::response($this->cover), 'https://img.test/bad.jpg' => Http::response('', 404)]);
+
+    expect($this->images->fromUrl($album, 'https://img.test/good.jpg'))->toBeTrue();
+    $stored = $this->images->cachedImage($album);
+
+    expect($this->images->fromUrl($album, 'https://img.test/bad.jpg'))->toBeFalse()
+        ->and($this->images->cachedImage($album))->toBe($stored)
+        ->and($album->refresh()->image_hash)->toBe(md5('radiohead|kid a'));
+});

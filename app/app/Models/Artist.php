@@ -22,6 +22,12 @@ class Artist extends Model
         'image_hash',
     ];
 
+    /** @return HasMany<Album, $this> */
+    public function albums(): HasMany
+    {
+        return $this->hasMany(Album::class, 'artist_name', 'name');
+    }
+
     /** @return HasMany<ArtistStat, $this> */
     public function stats(): HasMany
     {

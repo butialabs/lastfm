@@ -4,59 +4,62 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Artists\Tables;
 
+use App\Filament\Resources\Artists\Actions\ArtistImageActions;
+use App\Models\Album;
 use App\Models\Artist;
-use App\Services\ImageProviderService;
 use App\Services\LastFm\ArtistImageFetcher;
-use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\ViewAction;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Radio;
-use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Support\HtmlString;
+use Illuminate\Database\Eloquent\Builder;
 
 class ArtistsTable
 {
+    private const ALBUM_PREVIEW = 4;
+
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->with(['albums' => fn ($q) => $q->withImage()->latest('updated_at')])
+                ->withCount('albums'))
             ->columns([
                 ImageColumn::make('image')
                     ->label('')
                     ->getStateUsing(fn (Artist $record): string => route('admin.artists.image', $record))
                     ->square()
-                    ->size(48),
+                    ->imageSize(48)
+                    ->extraImgAttributes(['loading' => 'lazy']),
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable()
                     ->url(fn (Artist $record): string => $record->lastfm_url, true),
+                ImageColumn::make('album_covers')
+                    ->label('Albums')
+                    ->getStateUsing(fn (Artist $record): array => $record->albums
+                        ->map(fn (Album $album): string => route('admin.albums.image', $album))
+                        ->all())
+                    ->square()
+                    ->imageSize(36)
+                    ->stacked()
+                    ->overlap(2)
+                    ->limit(self::ALBUM_PREVIEW)
+                    ->limitedRemainingText()
+                    ->extraImgAttributes(['loading' => 'lazy'])
+                    ->placeholder('—'),
+                TextColumn::make('albums_count')
+                    ->label('# Albums')
+                    ->numeric()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('musicbrainz_id')
                     ->label('MBID')
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('image_hash')
-                    ->label('Image')
-                    ->badge()
-                    ->formatStateUsing(fn (Artist $record): string => match (true) {
-                        $record->image_hash === Artist::PLACEHOLDER_HASH => 'placeholder',
-                        empty($record->image_hash) => 'missing',
-                        default => 'ok',
-                    })
-                    ->colors([
-                        'warning' => 'placeholder',
-                        'danger' => 'missing',
-                        'success' => 'ok',
-                    ]),
-                TextColumn::make('stats_count')
-                    ->label('Appearances')
-                    ->counts('stats')
-                    ->numeric()
-                    ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime('Y-m-d H:i')
                     ->sortable()
@@ -70,80 +73,21 @@ class ArtistsTable
                         'placeholder' => 'Placeholder',
                     ])
                     ->query(fn ($query, array $data) => $query->noImage($data['value'] ?? null)),
+                SelectFilter::make('has_albums')
+                    ->label('Albums')
+                    ->options([
+                        'with' => 'With albums',
+                        'without' => 'Without albums',
+                    ])
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {
+                        'with' => $query->has('albums'),
+                        'without' => $query->doesntHave('albums'),
+                        default => $query,
+                    }),
             ])
             ->recordActions([
                 ViewAction::make(),
-                Action::make('regenerate-image')
-                    ->label('Force download')
-                    ->icon('heroicon-o-arrow-path')
-                    ->requiresConfirmation()
-                    ->action(function (Artist $record, ArtistImageFetcher $images): void {
-                        $ok = $images->regenerate((int) $record->id);
-
-                        Notification::make()
-                            ->title($ok ? 'Image updated' : 'Failed to download image')
-                            ->{$ok ? 'success' : 'danger'}()
-                            ->send();
-                    }),
-                Action::make('change-image-url')
-                    ->label('Set image from URL')
-                    ->icon('heroicon-o-link')
-                    ->schema([
-                        TextInput::make('url')
-                            ->label('Image URL')
-                            ->url()
-                            ->required(),
-                    ])
-                    ->action(function (Artist $record, array $data, ArtistImageFetcher $images): void {
-                        $ok = $images->fromUrl((int) $record->id, (string) $data['url']);
-
-                        Notification::make()
-                            ->title($ok ? 'Image updated' : 'Failed to download image')
-                            ->{$ok ? 'success' : 'danger'}()
-                            ->send();
-                    }),
-                Action::make('find-sources')
-                    ->label('Find images')
-                    ->icon('heroicon-o-magnifying-glass')
-                    ->schema(function (Artist $record, ImageProviderService $providers): array {
-                        $sources = $providers->fetchImageSources($record->name, $record->musicbrainz_id);
-
-                        if ($sources === []) {
-                            return [
-                                Placeholder::make('empty')
-                                    ->label('No sources found (TheAudioDB/Fanart).'),
-                            ];
-                        }
-
-                        $options = [];
-                        foreach ($sources as $source) {
-                            $options[$source['url']] = new HtmlString(
-                                '<span class="flex items-center gap-3">'
-                                .'<img src="'.e($source['url']).'" alt="" class="w-12 h-12 object-cover rounded-md" loading="lazy">'
-                                .'<span><strong>'.e($source['source']).'</strong> · '.e($source['type']).'</span>'
-                                .'</span>'
-                            );
-                        }
-
-                        return [
-                            Radio::make('url')
-                                ->label('Choose an image')
-                                ->options($options)
-                                ->required(),
-                        ];
-                    })
-                    ->action(function (Artist $record, array $data, ArtistImageFetcher $images): void {
-                        if (empty($data['url'])) {
-                            return;
-                        }
-
-                        $ok = $images->fromUrl((int) $record->id, (string) $data['url']);
-
-                        Notification::make()
-                            ->title($ok ? 'Image updated' : 'Failed to download image')
-                            ->{$ok ? 'success' : 'danger'}()
-                            ->send();
-                    }),
+                ArtistImageActions::group(),
             ])
             ->toolbarActions([
                 BulkAction::make('regenerate-images')

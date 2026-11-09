@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Users\Tables;
 
 use App\Models\User;
+use App\Services\MontageService;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -15,6 +17,28 @@ use Illuminate\Database\Eloquent\Builder;
 
 class UsersTable
 {
+    public const GRID_SOURCES = [
+        User::GRID_ARTIST => 'Artist photos',
+        User::GRID_ALBUM => 'Album covers',
+    ];
+
+    public static function gridSizeLabel(int $size): string
+    {
+        return match ($size) {
+            3 => '3 · 1+2',
+            4 => '4 · 2x2',
+            5 => '5 · 1+4',
+            6 => '6 · 3x2',
+            9 => '9 · 3x3',
+            default => (string) $size,
+        };
+    }
+
+    public static function montageUrl(User $record): ?string
+    {
+        return $record->social_montage ? url($record->social_montage) : null;
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -49,6 +73,27 @@ class UsersTable
                         'danger' => User::STATUS_ERROR,
                     ])
                     ->sortable(),
+                TextColumn::make('grid_source')
+                    ->label('Images')
+                    ->badge()
+                    ->state(fn (User $record): string => $record->gridSource())
+                    ->formatStateUsing(fn (string $state): string => self::GRID_SOURCES[$state] ?? $state)
+                    ->color(fn (string $state): string => $state === User::GRID_ALBUM ? 'success' : 'info')
+                    ->sortable(),
+                TextColumn::make('grid_size')
+                    ->label('Grid')
+                    ->badge()
+                    ->state(fn (User $record): int => $record->gridSize())
+                    ->formatStateUsing(fn (int $state): string => self::gridSizeLabel($state))
+                    ->color('gray')
+                    ->sortable(),
+                ImageColumn::make('montage')
+                    ->label('Montage')
+                    ->state(fn (User $record): ?string => self::montageUrl($record))
+                    ->imageHeight(40)
+                    ->extraImgAttributes(['loading' => 'lazy'])
+                    ->url(fn (User $record): ?string => self::montageUrl($record), true)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('error_count')
                     ->label('Errors')
                     ->numeric()
@@ -81,6 +126,14 @@ class UsersTable
                         User::STATUS_SENDING => 'Sending',
                         User::STATUS_ERROR => 'Error',
                     ]),
+                SelectFilter::make('grid_source')
+                    ->label('Grid images')
+                    ->options(self::GRID_SOURCES),
+                SelectFilter::make('grid_size')
+                    ->label('Grid size')
+                    ->options(collect(MontageService::SIZES)
+                        ->mapWithKeys(fn (int $size): array => [$size => self::gridSizeLabel($size)])
+                        ->all()),
                 SelectFilter::make('day_of_week')
                     ->label('Schedule day (UTC)')
                     ->options(collect(User::DAYS)

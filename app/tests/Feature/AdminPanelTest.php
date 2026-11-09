@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 use App\Filament\Pages\Auth\Login;
 use App\Filament\Resources\Artists\Pages\ListArtists;
+use App\Filament\Resources\Artists\Pages\ViewArtist;
+use App\Filament\Resources\Artists\RelationManagers\AlbumsRelationManager;
 use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Filament\Widgets\ArtistStatsTable;
 use App\Filament\Widgets\StatsOverview;
 use App\Models\Admin;
+use App\Models\Album;
 use App\Models\Artist;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Intervention\Image\ImageManager;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -124,4 +130,96 @@ it('requires an authenticated admin to stream artist images', function () {
     $this->actingAs($this->admin, 'admin')
         ->get(route('admin.artists.image', $artist))
         ->assertNotFound();
+});
+
+it('shows and filters users by grid images and size', function () {
+    $albums = User::factory()->count(2)->create(['grid_source' => User::GRID_ALBUM, 'grid_size' => 9]);
+    $artists = User::factory()->create(['grid_source' => User::GRID_ARTIST, 'grid_size' => 5]);
+
+    $this->actingAs($this->admin, 'admin');
+
+    Livewire::test(ListUsers::class)
+        ->assertTableColumnExists('grid_source')
+        ->assertTableColumnExists('grid_size')
+        ->assertTableColumnFormattedStateSet('grid_source', 'Album covers', $albums->first())
+        ->assertTableColumnFormattedStateSet('grid_size', '9 · 3x3', $albums->first())
+        ->filterTable('grid_source', User::GRID_ALBUM)
+        ->assertCanSeeTableRecords($albums)
+        ->assertCanNotSeeTableRecords([$artists])
+        ->resetTableFilters()
+        ->filterTable('grid_size', 5)
+        ->assertCanSeeTableRecords([$artists])
+        ->assertCanNotSeeTableRecords($albums);
+});
+
+it('shows the grid preferences and montage on the user page', function () {
+    $user = User::factory()->create([
+        'grid_source' => User::GRID_ALBUM,
+        'grid_size' => 4,
+        'social_montage' => '/montage/'.md5('1'),
+    ]);
+
+    $this->actingAs($this->admin, 'admin')
+        ->get("/admin/users/{$user->id}")
+        ->assertOk()
+        ->assertSee('Album covers')
+        ->assertSee('4 · 2x2')
+        ->assertSee(url('/montage/'.md5('1')), false);
+});
+
+it('lists artists with their album covers and without the removed columns', function () {
+    $artist = Artist::factory()->create(['name' => 'Radiohead']);
+    $withCover = Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'OK Computer']);
+    Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'Pending', 'image_hash' => null]);
+    $lonely = Artist::factory()->create();
+
+    $this->actingAs($this->admin, 'admin');
+
+    Livewire::test(ListArtists::class)
+        ->assertTableColumnExists('album_covers')
+        ->assertTableColumnDoesNotExist('image_hash')
+        ->assertTableColumnDoesNotExist('stats_count')
+        ->assertTableColumnStateSet('album_covers', [route('admin.albums.image', $withCover)], $artist)
+        ->filterTable('has_albums', 'with')
+        ->assertCanSeeTableRecords([$artist])
+        ->assertCanNotSeeTableRecords([$lonely]);
+});
+
+it('runs the grouped artist image actions', function () {
+    $artist = Artist::factory()->create(['name' => 'Band']);
+
+    Http::fake(['https://img.test/*' => Http::response('nope', 404)]);
+
+    $this->actingAs($this->admin, 'admin');
+
+    Livewire::test(ListArtists::class)
+        ->callTableAction('change-image-url', $artist, ['url' => 'https://img.test/a.jpg'])
+        ->assertNotified('Failed to download image');
+
+    Http::assertSent(fn ($r) => $r->url() === 'https://img.test/a.jpg');
+});
+
+it('shows the albums tab on the artist page', function () {
+    $artist = Artist::factory()->create(['name' => 'Radiohead']);
+    $album = Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'Kid A']);
+
+    $this->actingAs($this->admin, 'admin');
+
+    Livewire::test(AlbumsRelationManager::class, ['ownerRecord' => $artist, 'pageClass' => ViewArtist::class])
+        ->assertOk()
+        ->assertCanSeeTableRecords([$album]);
+});
+
+it('streams cached album covers to admins only', function () {
+    Storage::fake('album-cache');
+    $album = Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'Kid A', 'image_hash' => md5('radiohead|kid a')]);
+    $webp = (string) ImageManager::gd()->create(10, 10)->fill('#00ff00')->toWebp();
+    Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', $webp);
+
+    $this->get(route('admin.albums.image', $album))->assertRedirect();
+
+    $this->actingAs($this->admin, 'admin')
+        ->get(route('admin.albums.image', $album))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/webp');
 });
