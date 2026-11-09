@@ -127,9 +127,29 @@ it('requires an authenticated admin to stream artist images', function () {
 
     $this->get(route('admin.artists.image', $artist))->assertRedirect();
 
+    // Not in the cache → the placeholder, never a broken image.
     $this->actingAs($this->admin, 'admin')
         ->get(route('admin.artists.image', $artist))
-        ->assertNotFound();
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/jpeg');
+
+    expect($this->get(route('admin.artists.image', $artist))->getContent())
+        ->toBe(file_get_contents(public_path('images/placeholder.jpg')));
+});
+
+it('serves the placeholder for albums without a cached cover', function () {
+    $album = Album::factory()->create(['image_hash' => null]);
+
+    $this->actingAs($this->admin, 'admin')
+        ->get(route('admin.albums.image', $album))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/jpeg');
+});
+
+it('does not offer manual artist creation', function () {
+    $this->actingAs($this->admin, 'admin');
+
+    Livewire::test(ListArtists::class)->assertActionDoesNotExist('create');
 });
 
 it('shows and filters users by grid images and size', function () {

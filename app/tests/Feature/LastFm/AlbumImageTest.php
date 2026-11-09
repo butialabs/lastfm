@@ -122,3 +122,43 @@ it('sets a cover from a URL and keeps the current one when it fails', function (
         ->and($this->images->cachedImage($album))->toBe($stored)
         ->and($album->refresh()->image_hash)->toBe(md5('radiohead|kid a'));
 });
+
+it('downloads the original size cover from the Last.fm CDN', function () {
+    $big = (string) ImageManager::gd()->create(1200, 1200)->fill('#123456')->toJpeg(quality: 100);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(albumInfo('https://lastfm.cdn.test/i/u/300x300/abc.png')),
+        'https://lastfm.cdn.test/i/u/abc.png' => Http::response($big),
+        'https://lastfm.cdn.test/i/u/300x300/abc.png' => Http::response($this->cover),
+    ]);
+
+    $info = getimagesizefromstring($this->images->imageFor('Radiohead', 'Kid A'));
+
+    expect([$info[0], $info[1]])->toBe([600, 600]);
+    Http::assertSent(fn ($r) => $r->url() === 'https://lastfm.cdn.test/i/u/abc.png');
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), '300x300/abc.png'));
+});
+
+it('falls back to the 300px cover when the original is unavailable', function () {
+    $small = (string) ImageManager::gd()->create(300, 300)->fill('#654321')->toJpeg(quality: 100);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(albumInfo('https://lastfm.cdn.test/i/u/300x300/abc.png')),
+        'https://lastfm.cdn.test/i/u/abc.png' => Http::response('', 404),
+        'https://lastfm.cdn.test/i/u/300x300/abc.png' => Http::response($small),
+    ]);
+
+    $info = getimagesizefromstring($this->images->imageFor('Radiohead', 'Amnesiac'));
+
+    expect($info[0])->toBe(300)
+        ->and(Album::where('name', 'Amnesiac')->first()->image_hash)->toBe(md5('radiohead|amnesiac'));
+});
+
+it('builds the original size url only for sized Last.fm CDN urls', function (string $url, ?string $expected) {
+    expect(AlbumImageFetcher::originalSizeUrl($url))->toBe($expected);
+})->with([
+    ['https://lastfm.freetls.fastly.net/i/u/300x300/abc.png', 'https://lastfm.freetls.fastly.net/i/u/abc.png'],
+    ['https://lastfm.freetls.fastly.net/i/u/174s/abc.png', 'https://lastfm.freetls.fastly.net/i/u/abc.png'],
+    ['https://lastfm.freetls.fastly.net/i/u/abc.png', null],
+    ['https://img.test/cover.jpg', null],
+]);

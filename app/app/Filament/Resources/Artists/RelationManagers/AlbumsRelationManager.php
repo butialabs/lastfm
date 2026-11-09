@@ -33,13 +33,10 @@ class AlbumsRelationManager extends RelationManager
             ->columns([
                 ImageColumn::make('cover')
                     ->label('')
-                    ->getStateUsing(fn (Album $record): ?string => filled($record->image_hash)
-                        ? route('admin.albums.image', $record)
-                        : null)
+                    ->getStateUsing(fn (Album $record): string => route('admin.albums.image', $record))
                     ->square()
                     ->imageSize(64)
-                    ->extraImgAttributes(['loading' => 'lazy'])
-                    ->placeholder('—'),
+                    ->extraImgAttributes(['loading' => 'lazy']),
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
