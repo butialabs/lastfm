@@ -21,8 +21,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{ $title }}</title>
-	<meta name="title" content="{{ $logo }} {{ $title }}">
+	<title>@hasSection('page-title')@yield('page-title') · @endif{{ $title }} · LastFM.blue</title>
 	<meta name="description" content="{{ $description }}">
 
 	<meta property="og:type" content="website">
@@ -43,9 +42,9 @@
 	<link rel="manifest" href="/images/meta/site.webmanifest">
 	<link rel="mask-icon" href="/images/meta/safari-pinned-tab.svg" color="#5bbad5">
 	<link rel="shortcut icon" href="/images/meta/favicon.ico">
-	<meta name="msapplication-TileColor" content="#eaa0a4">
+	<meta name="msapplication-TileColor" content="#94bbe9">
 	<meta name="msapplication-config" content="/images/meta/browserconfig.xml">
-	<meta name="theme-color" content="#ffffff">
+	<meta name="theme-color" content="#94bbe9">
 
 	<link href="/css/style.css" rel="stylesheet">
 	<link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,7 +57,7 @@
 	<div class="middle">
 		<div class="container">
 			<header>
-				<div class="logo">{{ $logo }}</div>
+				<div class="logo" aria-hidden="true">{{ $logo }}</div>
 				<h1>{{ $title }}</h1>
 				<p>{!! $descriptionHtml !!}</p>
 			</header>
@@ -68,18 +67,21 @@
 			</main>
 
 			<footer>
-				<div>{{ __('messages.footer.made_with_love') }} <a href="https://butialabs.com" target="_blank" rel="noopener"><strong>Butiá Labs</strong></a> ● <a href="https://github.com/butialabs/lastfm" target="_blank"><strong>Github</strong></a></div>
+				<div>{{ __('messages.footer.made_with_love') }} <a href="https://butialabs.com" target="_blank" rel="noopener"><strong>Butiá Labs</strong></a> · <a href="https://github.com/butialabs/lastfm" target="_blank" rel="noopener"><strong>GitHub</strong></a></div>
 
-				<div class="users">{{ sprintf(trans_choice('messages.footer.total_users', $totalUsers ?? 0), $totalUsers ?? 0) }}</div>
+				@unless (in_array(trim($__env->yieldContent('body-class')), ['page-login', 'page-settings'], true))
+					<div class="users">{{ sprintf(trans_choice('messages.footer.total_users', $totalUsers ?? 0), $totalUsers ?? 0) }}</div>
+				@endunless
 
-				<form method="post" action="{{ route('locale') }}">
+				<form method="post" action="{{ route('locale') }}" class="locale">
 					@csrf
-					<select name="locale" onchange="this.form.submit()" aria-label="{{ __('messages.app.language') }}">
-						<option disabled>{{ __('messages.app.language') }}</option>
+					<label for="locale">{{ __('messages.app.language') }}</label>
+					<select id="locale" name="locale" onchange="this.form.submit()">
 						<option value="en" @selected($currentLocale === 'en')>English</option>
 						<option value="pt-BR" @selected($currentLocale === 'pt-BR')>Português (Brasil)</option>
 						<option value="fr-FR" @selected($currentLocale === 'fr-FR')>Français (France)</option>
 					</select>
+					<noscript><button type="submit">OK</button></noscript>
 				</form>
 			</footer>
 		</div>

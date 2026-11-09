@@ -34,9 +34,14 @@ class AuthController extends Controller
         $clientId = $request->session()->pull('mastodon_client_id');
         $clientSecret = $request->session()->pull('mastodon_client_secret');
 
-        if ($state === '' || $code === '' || ! is_string($sessionState) || ! hash_equals($sessionState, $state)
+        // The person declined on the instance's consent screen.
+        if ($request->query('error') === 'access_denied') {
+            return $this->failedMastodonLogin(__('messages.error.oauth_denied'), $instance);
+        }
+
+        if ($state === ''|| $code === '' || ! is_string($sessionState) || ! hash_equals($sessionState, $state)
             || ! is_string($instance) || ! is_string($clientId) || ! is_string($clientSecret)) {
-            return $this->failedMastodonLogin();
+            return $this->failedMastodonLogin(instance: $instance);
         }
 
         try {
@@ -58,7 +63,7 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             Log::channel('app')->warning('Mastodon callback failed', ['error' => $e->getMessage()]);
 
-            return $this->failedMastodonLogin();
+            return $this->failedMastodonLogin(__('messages.error.oauth_failed'), $instance);
         }
 
         Auth::login($user);
@@ -73,15 +78,19 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        session()->flash('flash', __('messages.auth.logged_out'));
+        session()->flash('flash_notice', __('messages.auth.logged_out'));
 
         return redirect('/');
     }
 
-    private function failedMastodonLogin(): RedirectResponse
+    private function failedMastodonLogin(?string $message = null, mixed $instance = null): RedirectResponse
     {
-        session()->flash('flash', __('messages.error.auth_failed'));
+        session()->flash('flash', $message ?? __('messages.error.oauth_failed'));
         session()->flash('flash_protocol', 'mastodon');
+
+        if (is_string($instance) && $instance !== '') {
+            session()->flash('flash_instance', (string) (parse_url($instance, PHP_URL_HOST) ?: $instance));
+        }
 
         return redirect('/');
     }

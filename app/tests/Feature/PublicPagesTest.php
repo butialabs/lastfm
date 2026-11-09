@@ -128,10 +128,113 @@ it('shows an error when Bluesky login fails', function () {
         ->set('password', 'wrong')
         ->call('loginBluesky')
         ->assertNoRedirect()
-        ->assertSet('errorMessage', __('messages.error.auth_failed'));
+        ->assertSet('errorField', 'password')
+        ->assertSet('errorMessage', __('messages.error.main_password'));
 
     expect(User::count())->toBe(0);
     $this->assertGuest();
+});
+
+it('tells a rejected app password apart from a main password', function () {
+    Http::fake([
+        'https://bsky.social/xrpc/*' => Http::response(['error' => 'AuthenticationRequired'], 401),
+    ]);
+
+    Livewire::test(LoginForm::class)
+        ->call('selectNetwork', 'at')
+        ->set('username', 'alice.bsky.social')
+        ->set('password', 'abcd-efgh-ijkl-mnop')
+        ->call('loginBluesky')
+        ->assertSet('errorField', 'credentials')
+        ->assertSet('errorMessage', __('messages.error.invalid_credentials'))
+        ->assertSeeHtml('id="bluesky-handle"')
+        ->assertSeeHtml('aria-describedby="login-error"');
+});
+
+it('keeps what was typed when going back, except the password', function () {
+    Livewire::test(LoginForm::class)
+        ->call('selectNetwork', 'at')
+        ->set('username', 'alice.bsky.social')
+        ->set('password', 'abcd-efgh-ijkl-mnop')
+        ->call('back')
+        ->assertSet('protocol', '')
+        ->assertSet('username', 'alice.bsky.social')
+        ->assertSet('password', '')
+        ->call('selectNetwork', 'mastodon')
+        ->assertSet('instance', '')
+        ->set('instance', 'fosstodon.org')
+        ->call('back')
+        ->call('selectNetwork', 'mastodon')
+        ->assertSet('instance', 'fosstodon.org');
+});
+
+it('renders the sample post in the real post format', function () {
+    $this->get('/')
+        ->assertOk()
+        ->assertSee('Lua Vermelha (87)')
+        ->assertSee('#myweekcounted')
+        ->assertDontSee('{{ ', false);
+});
+
+it('points Bluesky server failures at the server field', function () {
+    Http::fake([
+        'https://pds.example/xrpc/*' => Http::response('<html>nope</html>', 200),
+    ]);
+
+    Livewire::test(LoginForm::class)
+        ->call('selectNetwork', 'at')
+        ->set('customServer', true)
+        ->set('instance', 'pds.example')
+        ->set('username', 'alice')
+        ->set('password', 'abcd-efgh-ijkl-mnop')
+        ->call('loginBluesky')
+        ->assertSet('errorField', 'instance')
+        ->assertSet('errorMessage', sprintf(__('messages.error.not_bluesky'), 'pds.example'));
+});
+
+it('accepts a full Mastodon handle as the instance', function () {
+    Http::fake([
+        'https://fosstodon.org/api/v1/apps' => Http::response(['client_id' => 'cid', 'client_secret' => 'secret']),
+    ]);
+
+    Livewire::test(LoginForm::class)
+        ->call('selectNetwork', 'mastodon')
+        ->set('instance', '@bob@fosstodon.org')
+        ->call('startMastodon')
+        ->assertRedirectContains('https://fosstodon.org/oauth/authorize');
+});
+
+it('explains when the Mastodon instance is not a Mastodon server', function () {
+    Http::fake([
+        'https://example.com/api/v1/apps' => Http::response('Not found', 404),
+    ]);
+
+    Livewire::test(LoginForm::class)
+        ->call('selectNetwork', 'mastodon')
+        ->set('instance', 'example.com')
+        ->call('startMastodon')
+        ->assertNoRedirect()
+        ->assertSet('errorMessage', sprintf(__('messages.error.not_mastodon'), 'example.com'));
+});
+
+it('explains a denied Mastodon authorization', function () {
+    $this->withSession([
+        'mastodon_state' => 'state-123',
+        'mastodon_instance' => 'https://mastodon.social',
+        'mastodon_client_id' => 'cid',
+        'mastodon_client_secret' => 'secret',
+    ])->get('/auth/mastodon/callback?error=access_denied&state=state-123')
+        ->assertRedirect('/')
+        ->assertSessionHas('flash', __('messages.error.oauth_denied'))
+        ->assertSessionHas('flash_instance', 'mastodon.social');
+
+    $this->assertGuest();
+});
+
+it('shows logout as a neutral notice, not an error', function () {
+    $this->actingAs(User::factory()->create())->post('/logout')
+        ->assertSessionHas('flash_notice', __('messages.auth.logged_out'))
+        ->assertSessionMissing('flash');
 });
 
 it('completes the Mastodon OAuth flow', function () {
@@ -258,6 +361,68 @@ it('rejects an unknown Last.fm user', function () {
         ->assertHasErrors('lastfm_username');
 
     expect($user->fresh()->lastfm_username)->toBeNull();
+});
+
+it('shows the schedule in the user timezone, not in UTC', function () {
+    // Friday 22:00 in São Paulo is stored as Saturday 01:00 UTC.
+    [$dow, $time] = User::convertLocalScheduleToUtc(5, '22:00', new DateTimeZone('America/Sao_Paulo'));
+    $user = User::factory()->scheduled()->create(['day_of_week' => $dow, 'time' => $time, 'timezone' => 'America/Sao_Paulo']);
+
+    expect($dow)->toBe(6);
+
+    Livewire::actingAs($user)
+        ->test(SettingsForm::class)
+        ->assertSet('editing', false)
+        ->assertSet('day_of_week', 5)
+        ->assertSet('hour', '22:00')
+        ->assertSee(__('messages.settings.title'));
+
+    expect($user->nextPostAt()->getTimezone()->getName())->toBe('America/Sao_Paulo')
+        ->and($user->nextPostAt()->format('N H:i'))->toBe('5 22:00');
+});
+
+it('computes the next post strictly in the future', function () {
+    $user = User::factory()->make(['day_of_week' => 5, 'time' => '12:00:00', 'timezone' => 'UTC']);
+
+    // Friday 2026-11-13 12:00 UTC exactly → the following Friday.
+    expect($user->nextPostAt(new DateTimeImmutable('2026-11-13 12:00:00', new DateTimeZone('UTC')))->toDateString())->toBe('2026-11-20')
+        ->and($user->nextPostAt(new DateTimeImmutable('2026-11-13 11:59:00', new DateTimeZone('UTC')))->toDateString())->toBe('2026-11-13');
+});
+
+it('cancels editing and restores the stored values', function () {
+    $user = User::factory()->scheduled()->create(['lastfm_username' => 'alice']);
+
+    Livewire::actingAs($user)
+        ->test(SettingsForm::class)
+        ->call('edit')
+        ->set('lastfm_username', 'someone-else')
+        ->call('cancel')
+        ->assertSet('editing', false)
+        ->assertSet('lastfm_username', 'alice');
+});
+
+it('explains when Last.fm cannot be reached', function () {
+    Http::fake(['https://ws.audioscrobbler.com/*' => Http::response('down', 503)]);
+    $user = User::factory()->create(['lastfm_username' => null]);
+
+    Livewire::actingAs($user)
+        ->test(SettingsForm::class)
+        ->set('lastfm_username', 'alice')
+        ->set('day_of_week', 5)
+        ->set('hour', '09:00')
+        ->set('timezone', 'UTC')
+        ->call('save')
+        ->assertHasErrors(['lastfm_username'])
+        ->assertSee(__('messages.error.lastfm_unreachable'));
+});
+
+it('shows the next post date once scheduled', function () {
+    $user = User::factory()->scheduled()->create();
+
+    $this->actingAs($user)->get('/settings')
+        ->assertOk()
+        ->assertSee('status--success', false)
+        ->assertSee(__('messages.settings.page_title').' · ', false);
 });
 
 it('deletes the account and its montage file', function () {

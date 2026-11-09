@@ -287,6 +287,36 @@ class User extends Authenticatable
             ->format('H:i');
     }
 
+    /**
+     * Next time the weekly post goes out, in the user's own timezone.
+     * day_of_week/time are stored in UTC; null until the schedule is complete.
+     */
+    public function nextPostAt(?DateTimeInterface $now = null): ?CarbonImmutable
+    {
+        if (! $this->day_of_week || ! $this->time) {
+            return null;
+        }
+
+        try {
+            $tz = new DateTimeZone((string) ($this->timezone ?: 'UTC'));
+        } catch (\Throwable) {
+            $tz = new DateTimeZone('UTC');
+        }
+
+        $nowUtc = CarbonImmutable::instance($now ?? CarbonImmutable::now())->setTimezone('UTC');
+        [$hh, $mm] = array_map('intval', array_pad(explode(':', (string) $this->time), 2, 0));
+
+        $next = $nowUtc->startOfDay()
+            ->addDays(((int) $this->day_of_week - (int) $nowUtc->format('N') + 7) % 7)
+            ->setTime($hh, $mm);
+
+        if ($next->lessThanOrEqualTo($nowUtc)) {
+            $next = $next->addWeek();
+        }
+
+        return $next->setTimezone($tz);
+    }
+
     public function gridSource(): string
     {
         return in_array($this->grid_source, self::GRID_SOURCES, true) ? $this->grid_source : self::GRID_ARTIST;

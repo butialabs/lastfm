@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -17,6 +18,10 @@ final class MastodonClient
         if ($instance === '') {
             return 'https://mastodon.social';
         }
+        // Accept a full handle ("@user@instance" / "user@instance") as well as a host or URL.
+        if (! str_contains($instance, '://') && str_contains($instance, '@')) {
+            $instance = substr($instance, strrpos($instance, '@') + 1);
+        }
         if (! str_starts_with($instance, 'http')) {
             $instance = 'https://'.$instance;
         }
@@ -28,16 +33,21 @@ final class MastodonClient
     public function registerApp(string $instance, string $appName, string $redirectUri): array
     {
         $base = $this->normalizeInstance($instance);
-        $res = $this->request()->asForm()->post($base.'/api/v1/apps', [
-            'client_name' => $appName,
-            'redirect_uris' => $redirectUri,
-            'scopes' => 'read write',
-            'website' => (string) config('app.url', ''),
-        ]);
+
+        try {
+            $res = $this->request()->asForm()->post($base.'/api/v1/apps', [
+                'client_name' => $appName,
+                'redirect_uris' => $redirectUri,
+                'scopes' => 'read write',
+                'website' => (string) config('app.url', ''),
+            ]);
+        } catch (ConnectionException $e) {
+            throw new SocialAuthException(SocialAuthException::UNREACHABLE, $e->getMessage(), $e);
+        }
 
         $json = $res->json();
         if (! is_array($json) || ! isset($json['client_id'], $json['client_secret'])) {
-            throw new \RuntimeException('Invalid /api/v1/apps response');
+            throw new SocialAuthException(SocialAuthException::NOT_A_SERVER, 'Invalid /api/v1/apps response');
         }
 
         return ['client_id' => (string) $json['client_id'], 'client_secret' => (string) $json['client_secret']];

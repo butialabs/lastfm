@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -29,14 +30,25 @@ final class BlueskyClient
     public function createSession(string $instance, string $identifier, string $password): array
     {
         $base = $this->normalizeInstance($instance);
-        $res = $this->request()->post($base.'/xrpc/com.atproto.server.createSession', [
-            'identifier' => $identifier,
-            'password' => $password,
-        ]);
+
+        try {
+            $res = $this->request()->post($base.'/xrpc/com.atproto.server.createSession', [
+                'identifier' => $identifier,
+                'password' => $password,
+            ]);
+        } catch (ConnectionException $e) {
+            throw new SocialAuthException(SocialAuthException::UNREACHABLE, $e->getMessage(), $e);
+        }
 
         $json = $res->json();
+
+        // PDS answers 401 (AuthenticationRequired) or 400 with an XRPC error for bad credentials.
+        if (in_array($res->status(), [400, 401], true) && is_array($json) && isset($json['error'])) {
+            throw new SocialAuthException(SocialAuthException::REJECTED, (string) ($json['message'] ?? $json['error']));
+        }
+
         if (! is_array($json) || ! isset($json['did'], $json['accessJwt'], $json['refreshJwt'])) {
-            throw new \RuntimeException('Invalid Bluesky session response');
+            throw new SocialAuthException(SocialAuthException::NOT_A_SERVER, 'Invalid Bluesky session response');
         }
 
         return [
