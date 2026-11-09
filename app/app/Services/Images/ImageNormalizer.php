@@ -13,8 +13,11 @@ use Intervention\Image\ImageManager;
  */
 final class ImageNormalizer
 {
-    // Same guard MontageService used: refuse decompression bombs.
-    private const MAX_PIXELS = 25_000_000;
+    private const MAX_PIXELS = 100_000_000;
+
+    private const BYTES_PER_PIXEL = 5;
+
+    private const MEMORY_SHARE = 0.7;
 
     private ImageManager $images;
 
@@ -33,8 +36,14 @@ final class ImageNormalizer
             throw new \RuntimeException('Not a decodable image');
         }
 
-        if ($info[0] * $info[1] > self::MAX_PIXELS) {
-            throw new \RuntimeException('Image too large to decode');
+        $pixels = $info[0] * $info[1];
+        $limit = $this->maxPixels();
+
+        if ($pixels > $limit) {
+            throw new \RuntimeException(sprintf(
+                'Image too large to decode: %dx%d (%.1f MP, limit %.1f MP with memory_limit=%s)',
+                $info[0], $info[1], $pixels / 1e6, $limit / 1e6, ini_get('memory_limit'),
+            ));
         }
 
         try {
@@ -61,6 +70,37 @@ final class ImageNormalizer
     public function mimeType(): string
     {
         return $this->format() === 'webp' ? 'image/webp' : 'image/jpeg';
+    }
+
+    public function maxPixels(): int
+    {
+        $limit = $this->memoryLimitBytes();
+
+        if ($limit === null) {
+            return self::MAX_PIXELS;
+        }
+
+        $free = max(0, $limit - memory_get_usage(true));
+
+        return (int) min(self::MAX_PIXELS, $free * self::MEMORY_SHARE / self::BYTES_PER_PIXEL);
+    }
+
+    private function memoryLimitBytes(): ?int
+    {
+        $value = trim((string) ini_get('memory_limit'));
+
+        if ($value === '' || $value === '-1') {
+            return null;
+        }
+
+        $bytes = (int) $value;
+
+        return match (strtolower(substr($value, -1))) {
+            'g' => $bytes * 1024 ** 3,
+            'm' => $bytes * 1024 ** 2,
+            'k' => $bytes * 1024,
+            default => $bytes,
+        };
     }
 
     private function size(): int
