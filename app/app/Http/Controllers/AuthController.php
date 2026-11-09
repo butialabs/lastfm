@@ -39,7 +39,7 @@ class AuthController extends Controller
             return $this->failedMastodonLogin(__('messages.error.oauth_denied'), $instance);
         }
 
-        if ($state === ''|| $code === '' || ! is_string($sessionState) || ! hash_equals($sessionState, $state)
+        if ($state === '' || $code === '' || ! is_string($sessionState) || ! hash_equals($sessionState, $state)
             || ! is_string($instance) || ! is_string($clientId) || ! is_string($clientSecret)) {
             return $this->failedMastodonLogin(instance: $instance);
         }
