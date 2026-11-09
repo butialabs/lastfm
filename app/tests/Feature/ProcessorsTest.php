@@ -309,3 +309,88 @@ it('fails when the montage file is missing', function () {
     expect($user->refresh()->send_attempts)->toBe(1)
         ->and($user->error_count)->toBe(0);
 });
+
+it('limits the chart and the montage to the user grid size', function () {
+    $user = User::factory()->scheduled()->create(['lastfm_username' => 'alice', 'grid_size' => 9]);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response($this->weeklyChart),
+        'https://www.last.fm/music/*' => Http::response('<meta property="og:image" content="https://images.example/img.jpg">'),
+        'https://images.example/*' => Http::response($this->jpegBinary),
+    ]);
+
+    expect(app(UserProcessor::class)->processUser($user))->toBeTrue();
+
+    $info = getimagesizefromstring(Storage::disk('montage')->get(md5((string) $user->id).'.jpg'));
+    expect([$info[0], $info[1]])->toBe([1200, 1200]);
+});
+
+it('builds an album cover montage and an album post in album mode', function () {
+    Storage::fake('album-cache');
+
+    $albumChart = ['weeklyalbumchart' => ['album' => [
+        ['name' => 'Album One', 'playcount' => '25', 'mbid' => '', 'artist' => ['#text' => 'Band One']],
+        ['name' => 'Album Two', 'playcount' => '15', 'mbid' => '', 'artist' => ['#text' => 'Band Two']],
+    ]]];
+    $artistChart = $this->weeklyChart;
+
+    $user = User::factory()->scheduled()->create([
+        'lastfm_username' => 'alice',
+        'grid_source' => User::GRID_ALBUM,
+        'grid_size' => 3,
+        'password' => Crypt::encryptString('app-password'),
+    ]);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => fn ($request) => match (true) {
+            str_contains($request->url(), 'user.getweeklyalbumchart') => Http::response($albumChart),
+            str_contains($request->url(), 'user.getweeklyartistchart') => Http::response($artistChart),
+            default => Http::response(['album' => ['image' => [
+                ['#text' => 'https://images.example/cover.jpg', 'size' => 'extralarge'],
+            ]]]),
+        },
+        'https://images.example/*' => Http::response($this->jpegBinary),
+        'https://bsky.social/xrpc/com.atproto.server.createSession' => Http::response([
+            'did' => 'did:plc:alice', 'accessJwt' => 'jwt', 'refreshJwt' => 'refresh',
+        ]),
+        'https://bsky.social/xrpc/com.atproto.repo.uploadBlob' => Http::response([
+            'blob' => ['$type' => 'blob', 'ref' => ['$link' => 'bafkreiabc'], 'mimeType' => 'image/jpeg', 'size' => 1],
+        ]),
+        'https://bsky.social/xrpc/com.atproto.identity.resolveHandle' => Http::response(['did' => 'did:plc:bot']),
+        'https://bsky.social/xrpc/com.atproto.repo.createRecord' => Http::response(['uri' => 'at://x/1', 'cid' => 'cid1']),
+    ]);
+
+    expect(app(UserProcessor::class)->processUser($user))->toBeTrue();
+
+    Storage::disk('album-cache')->assertExists(md5('band one|album one').'.webp');
+    // Artist stats are still recorded in album mode.
+    expect(ArtistStat::where('user_id', $user->id)->count())->toBe(2);
+
+    expect(app(QueueProcessor::class)->sendForUser($user->refresh()))->toBeTrue();
+
+    expect($user->refresh()->social_message)
+        ->toStartWith('♫ Top 2 albums of the Last.week: Album One – Band One (25) Album Two – Band Two (15)')
+        ->toContain('40 Scrobbles');
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'createRecord')
+        && str_contains($request['record']['embed']['images'][0]['alt'], 'album covers'));
+});
+
+it('shows the artist count in the post title', function () {
+    $user = makeQueuedUser($this->jpegBinary, [
+        'protocol' => User::PROTOCOL_MASTODON,
+        'instance' => 'https://mastodon.social',
+        'username' => 'bob',
+        'password' => null,
+        'token' => Crypt::encryptString('mastodon-token'),
+    ]);
+
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response($this->weeklyChart),
+        'https://mastodon.social/api/v2/media' => Http::response(['id' => 'media-1']),
+        'https://mastodon.social/api/v1/statuses' => Http::response(['id' => 'status-1']),
+    ]);
+
+    expect(app(QueueProcessor::class)->sendForUser($user))->toBeTrue()
+        ->and($user->refresh()->social_message)->toStartWith('♫ Top 2 artists of the Last.week: Band One (30)');
+});

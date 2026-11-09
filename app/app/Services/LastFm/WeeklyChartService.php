@@ -28,6 +28,23 @@ final class WeeklyChartService
     }
 
     /**
+     * Weekly album chart. Passing $userId also records the artist stats (from
+     * the artist chart), so the statistics stay the same in both grid modes.
+     *
+     * @return array{albums: list<array{name:string,artist:string,playcount:int,mbid:?string}>, total_scrobbles: int}
+     */
+    public function albumsForUser(string $username, ?int $limit = null, ?int $userId = null): array
+    {
+        $limit ??= (int) config('lastfm.post.chart_size', 5);
+
+        if ($userId !== null) {
+            $this->forUser($username, $limit, $userId);
+        }
+
+        return $this->api->weeklyAlbumChart($username, $limit);
+    }
+
+    /**
      * @param  list<array{name:string,playcount:int,imageUrl:?string,mbid:?string}>  $entries
      */
     private function syncArtists(array $entries, ?int $userId): void

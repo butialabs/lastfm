@@ -39,4 +39,4 @@ COPY --chown=www-data:www-data app/ /app/
 
 RUN composer install --no-interaction --no-dev --no-progress --optimize-autoloader \
     && php artisan filament:assets \
-    && mkdir -p data/db data/cache/artists data/logs data/montage
+    && mkdir -p data/db data/cache/artists data/cache/albums data/logs data/montage

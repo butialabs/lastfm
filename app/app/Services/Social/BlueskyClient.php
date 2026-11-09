@@ -49,24 +49,20 @@ final class BlueskyClient
     /**
      * @return array{blob: array<string,mixed>, width: int, height: int}
      */
-    public function uploadImage(string $instance, string $accessJwt, string $absoluteImagePath): array
+    public function uploadImage(string $instance, string $accessJwt, string $imageBinary): array
     {
         $base = $this->normalizeInstance($instance);
-        $bin = file_get_contents($absoluteImagePath);
-        if ($bin === false) {
-            throw new \RuntimeException('Unable to read image: '.$absoluteImagePath);
-        }
 
-        $imageInfo = getimagesize($absoluteImagePath);
+        $imageInfo = @getimagesizefromstring($imageBinary);
         if ($imageInfo === false) {
-            throw new \RuntimeException('Unable to get image dimensions: '.$absoluteImagePath);
+            throw new \RuntimeException('Unable to get image dimensions');
         }
         $width = (int) $imageInfo[0];
         $height = (int) $imageInfo[1];
 
         $res = $this->request()
             ->withToken($accessJwt)
-            ->withBody($bin, 'image/jpeg')
+            ->withBody($imageBinary, (string) ($imageInfo['mime'] ?? 'image/jpeg'))
             ->post($base.'/xrpc/com.atproto.repo.uploadBlob');
 
         $json = $res->json();

@@ -6,6 +6,7 @@ namespace App\Livewire;
 
 use App\Models\User;
 use App\Services\LastFm\LastFmApi;
+use App\Services\MontageService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -20,6 +21,10 @@ class SettingsForm extends Component
     public string $hour = '09:00';
 
     public string $timezone = 'UTC';
+
+    public string $grid_source = User::GRID_ARTIST;
+
+    public int $grid_size = MontageService::DEFAULT_SIZE;
 
     public bool $editing = false;
 
@@ -37,6 +42,8 @@ class SettingsForm extends Component
         $this->day_of_week = (int) ($user->day_of_week ?? 7);
         $this->timezone = (string) ($user->timezone ?? 'UTC');
         $this->hour = $user->scheduleHourForTimezone($this->timezone);
+        $this->grid_source = $user->gridSource();
+        $this->grid_size = $user->gridSize();
         $this->timezones = \DateTimeZone::listIdentifiers();
 
         // Incomplete setup → start in editing mode.
@@ -60,6 +67,8 @@ class SettingsForm extends Component
             'day_of_week' => ['required', 'integer', 'between:1,7'],
             'hour' => ['required', 'date_format:H:i'],
             'timezone' => ['required', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
+            'grid_source' => ['required', 'string', Rule::in(User::GRID_SOURCES)],
+            'grid_size' => ['required', 'integer', Rule::in(MontageService::SIZES)],
         ], [
             'lastfm_username.required' => __('messages.error.missing_fields'),
             'hour.date_format' => __('messages.error.invalid_time'),
@@ -85,6 +94,8 @@ class SettingsForm extends Component
                 'day_of_week' => $utcDow,
                 'time' => $utcTime,
                 'timezone' => $this->timezone,
+                'grid_source' => $this->grid_source,
+                'grid_size' => (int) $this->grid_size,
                 'status' => User::STATUS_SCHEDULE,
                 'error_count' => 0,
                 'send_attempts' => 0,
@@ -137,6 +148,7 @@ class SettingsForm extends Component
     {
         return view('livewire.settings-form', [
             'user' => Auth::user(),
+            'gridSizes' => MontageService::SIZES,
         ]);
     }
 }

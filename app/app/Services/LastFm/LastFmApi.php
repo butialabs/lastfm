@@ -38,44 +38,118 @@ final class LastFmApi
     public function weeklyChart(string $username, int $limit): array
     {
         $data = $this->call('user.getweeklyartistchart', ['user' => $username]);
-        $artists = $data['weeklyartistchart']['artist'] ?? [];
 
-        if (! is_array($artists)) {
-            return ['artists' => [], 'total_scrobbles' => 0];
+        [$entries, $total] = $this->parseChart(
+            $data['weeklyartistchart']['artist'] ?? [],
+            $limit,
+            fn (array $a, string $name, int $playcount, ?string $mbid) => [
+                'name' => $name,
+                'playcount' => $playcount,
+                'imageUrl' => is_array($a['image'] ?? null) ? $this->pickLargestImageUrl($a['image']) : null,
+                'mbid' => $mbid,
+            ],
+        );
+
+        return ['artists' => $entries, 'total_scrobbles' => $total];
+    }
+
+    /**
+     * Top albums of the week, plus the scrobble total across the whole chart.
+     *
+     * @return array{albums: list<array{name:string,artist:string,playcount:int,mbid:?string}>, total_scrobbles: int}
+     */
+    public function weeklyAlbumChart(string $username, int $limit): array
+    {
+        $data = $this->call('user.getweeklyalbumchart', ['user' => $username]);
+
+        [$entries, $total] = $this->parseChart(
+            $data['weeklyalbumchart']['album'] ?? [],
+            $limit,
+            static function (array $a, string $name, int $playcount, ?string $mbid): ?array {
+                $artist = $a['artist'] ?? '';
+                $artist = trim((string) (is_array($artist) ? ($artist['#text'] ?? $artist['name'] ?? '') : $artist));
+
+                if ($artist === '') {
+                    return null;
+                }
+
+                return ['name' => $name, 'artist' => $artist, 'playcount' => $playcount, 'mbid' => $mbid];
+            },
+        );
+
+        return ['albums' => $entries, 'total_scrobbles' => $total];
+    }
+
+    /**
+     * Largest cover URL Last.fm has for an album (null when it has none).
+     */
+    public function albumImageUrl(string $artist, string $album, ?string $mbid = null): ?string
+    {
+        try {
+            $data = $this->call('album.getinfo', $mbid !== null && $mbid !== ''
+                ? ['mbid' => $mbid]
+                : ['artist' => $artist, 'album' => $album, 'autocorrect' => 1]);
+        } catch (\RuntimeException $e) {
+            // An unknown mbid is common; retry by name before giving up.
+            if ($mbid !== null && $mbid !== '' && str_starts_with($e->getMessage(), 'Last.fm error:')) {
+                return $this->albumImageUrl($artist, $album);
+            }
+
+            if (str_starts_with($e->getMessage(), 'Last.fm error:')) {
+                return null;
+            }
+
+            throw $e;
         }
 
-        // A chart with a single artist comes back as an object, not a list.
-        if (isset($artists['name'])) {
-            $artists = [$artists];
+        return $this->pickLargestImageUrl($data['album']['image'] ?? null);
+    }
+
+    /**
+     * Shared chart parsing: normalizes the single-entry object form, sums the
+     * playcount of every entry and maps up to $limit named entries.
+     *
+     * @template T of array
+     *
+     * @param  callable(array<string,mixed>, string, int, ?string): ?T  $map
+     * @return array{0: list<T>, 1: int}
+     */
+    private function parseChart(mixed $items, int $limit, callable $map): array
+    {
+        if (! is_array($items)) {
+            return [[], 0];
+        }
+
+        // A chart with a single entry comes back as an object, not a list.
+        if (isset($items['name'])) {
+            $items = [$items];
         }
 
         $entries = [];
-        $totalScrobbles = 0;
+        $total = 0;
 
-        foreach ($artists as $a) {
-            if (! is_array($a)) {
+        foreach ($items as $item) {
+            if (! is_array($item)) {
                 continue;
             }
 
-            $playcount = (int) ($a['playcount'] ?? 0);
-            $totalScrobbles += $playcount;
+            $playcount = (int) ($item['playcount'] ?? 0);
+            $total += $playcount;
 
-            $name = (string) ($a['name'] ?? '');
+            $name = (string) ($item['name'] ?? '');
             if ($name === '' || count($entries) >= $limit) {
                 continue;
             }
 
-            $mbid = (string) ($a['mbid'] ?? '');
+            $mbid = (string) ($item['mbid'] ?? '');
+            $entry = $map($item, $name, $playcount, $mbid !== '' ? $mbid : null);
 
-            $entries[] = [
-                'name' => $name,
-                'playcount' => $playcount,
-                'imageUrl' => is_array($a['image'] ?? null) ? $this->pickLargestImageUrl($a['image']) : null,
-                'mbid' => $mbid !== '' ? $mbid : null,
-            ];
+            if ($entry !== null) {
+                $entries[] = $entry;
+            }
         }
 
-        return ['artists' => $entries, 'total_scrobbles' => $totalScrobbles];
+        return [$entries, $total];
     }
 
     /**

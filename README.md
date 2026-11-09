@@ -56,7 +56,6 @@ docker compose up -d
 | `ADMIN_USER` | Initial admin username (seeded on first boot) | First boot |
 | `ADMIN_PASSWORD` | Initial admin password (seeded on first boot, stored hashed) | First boot |
 | `APP_KEY` | Laravel encryption key (`php artisan key:generate --show`). Auto-generated and persisted in the data volume if omitted | No |
-| `ENCRYPTION_KEY` | **Upgrades from v1 only**: legacy key used to decrypt old credentials during the one-time import. Can be removed afterwards | No |
 | `TZ` / `PHP_DATE_TIMEZONE` | Container and PHP timezone (e.g., `America/Sao_Paulo`). Schedules are always stored and compared in UTC | No |
 | `LASTFM_PROXY_URL` | Proxy fallback for Last.fm image scraping (see below) | No |
 | `THEAUDIODB_API_KEY` / `FANART_API_KEY` | Alternative artist image providers for the admin panel | No |
@@ -67,6 +66,7 @@ docker compose up -d
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_BUCKET` / `AWS_DEFAULT_REGION` | S3 credentials and bucket, used when `IMAGE_STORAGE=s3` | With S3 |
 | `AWS_ENDPOINT` / `AWS_USE_PATH_STYLE_ENDPOINT` | Custom endpoint for S3-compatible services (Cloudflare R2, MinIO, ...). MinIO usually needs path-style `true` | No |
 | `AWS_ROOT` | Optional key prefix inside the bucket (objects go to `{AWS_ROOT}/montage`, `/artists`, `/albums`) | No |
+| `IMAGE_SIZE` / `IMAGE_QUALITY` / `IMAGE_FORMAT` | Normalization of downloaded images: square crop of at most `IMAGE_SIZE` px (default `600`), quality (default `80`), `webp` (default) or `jpeg` | No |
 
 The base image's own variables (`PHP_OPCACHE_*`, `NGINX_*`, `SSL_MODE`, `AUTORUN_*`, ...) are documented in the [serversideup/php reference](https://serversideup.net/open-source/docker-php/docs/reference/environment-variable-specification).
 
@@ -74,8 +74,7 @@ The base image's own variables (`PHP_OPCACHE_*`, `NGINX_*`, `SSL_MODE`, `AUTORUN
 
 ### Upgrading from v1 (custom PHP app)
 
-Keep `ENCRYPTION_KEY` (the old 32-char key) set on the **first boot** of the new version.
-After a successful import, `ENCRYPTION_KEY` can be removed from the environment.
+The automatic v1 import was removed. Upgrade to **2.0.9** first (keeping `ENCRYPTION_KEY` set on its first boot so the old database is imported), then to the latest version. `ENCRYPTION_KEY` is no longer used and can be removed.
 
 ### Proxy fallback
 
@@ -123,8 +122,8 @@ With `IMAGE_STORAGE=local`, `images:migrate --normalize` converts the existing c
 
 Mount the `/app/data` volume to persist:
 - SQLite database (`db/database.db`) and the generated `.app_key`
-- Artist image cache (`cache/artists/`)
-- Generated montages (`montage/`)
+- Artist and album image caches (`cache/artists/`, `cache/albums/`), unless `IMAGE_STORAGE=s3`
+- Generated montages (`montage/`), unless `IMAGE_STORAGE=s3`
 - Application logs (`logs/`)
 
 ---
@@ -167,8 +166,8 @@ php artisan lastfm:send
 # Force process + send for a single user
 php artisan lastfm:force-send {user_id}
 
-# One-time import of the legacy v1 database (automatic in Docker)
-php artisan lastfm:import-legacy
+# Copy local images to the configured storage / normalize the image cache
+php artisan images:migrate [--normalize] [--delete-source]
 ```
 
 Outside Docker, run the scheduler yourself:

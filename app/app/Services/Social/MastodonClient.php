@@ -93,18 +93,17 @@ final class MastodonClient
         return $json;
     }
 
-    public function uploadMedia(string $instance, string $token, string $absoluteImagePath, ?string $altText = null): string
+    public function uploadMedia(string $instance, string $token, string $imageBinary, ?string $altText = null, string $filename = 'montage.jpg'): string
     {
         $base = $this->normalizeInstance($instance);
 
-        $bin = file_get_contents($absoluteImagePath);
-        if ($bin === false) {
-            throw new \RuntimeException('Unable to read image: '.$absoluteImagePath);
+        if ($imageBinary === '') {
+            throw new \RuntimeException('Empty image');
         }
 
         $request = $this->request()
             ->withToken($token)
-            ->attach('file', $bin, basename($absoluteImagePath));
+            ->attach('file', $imageBinary, $filename);
 
         if ($altText !== null) {
             $request = $request->attach('description', $altText);

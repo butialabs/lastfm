@@ -28,6 +28,11 @@ return [
     'settings.confirm_delete' => 'Tem certeza que deseja excluir sua conta?',
     'settings.saved' => 'Configurações salvas.',
     'settings.last_update' => 'Última atualização',
+    'settings.grid_source' => 'Imagens do grid',
+    'settings.grid_size' => 'Tamanho do grid',
+    'settings.grid_artist' => 'Fotos dos artistas',
+    'settings.grid_album' => 'Capas dos álbuns',
+    'settings.grid_items' => '%d imagens',
     'settings.with_montage' => 'com',
     'settings.montage' => 'colagem',
 
@@ -45,10 +50,12 @@ return [
     'status.sending' => 'Seu post está sendo enviado.',
     'status.error' => 'Ocorreu um erro. O sistema tentará novamente na próxima rotina.',
 
-    'post.top_artists' => 'Top 5 artistas da Last.week',
+    'post.top_artists' => 'Top %d artistas da Last.week',
+    'post.top_albums' => 'Top %d álbuns da Last.week',
     'post.scrobbles' => '%d Scrobbles com Lastfm',
     'post.via' => 'via',
     'post.alt_text' => 'Colagem de fotos das bandas %s',
+    'post.alt_text_albums' => 'Colagem das capas dos álbuns %s',
 
     'auth.logged_out' => 'Sessão encerrada.',
 

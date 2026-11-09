@@ -197,6 +197,40 @@ it('saves settings converting the schedule to UTC', function () {
         ->and($user->status)->toBe(User::STATUS_SCHEDULE);
 });
 
+it('saves the grid preferences', function () {
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(['user' => ['name' => 'alice']]),
+    ]);
+
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test(SettingsForm::class)
+        ->assertSet('grid_source', User::GRID_ARTIST)
+        ->assertSet('grid_size', 5)
+        ->set('grid_source', User::GRID_ALBUM)
+        ->set('grid_size', 9)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $user->refresh();
+    expect($user->grid_source)->toBe(User::GRID_ALBUM)
+        ->and($user->grid_size)->toBe(9);
+});
+
+it('rejects unsupported grid preferences', function () {
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test(SettingsForm::class)
+        ->set('grid_source', 'track')
+        ->set('grid_size', 7)
+        ->call('save')
+        ->assertHasErrors(['grid_source', 'grid_size']);
+
+    expect($user->fresh()->grid_size)->toBe(5);
+});
+
 it('converts local schedule to UTC across day boundaries', function () {
     // Friday 01:00 at UTC-3 (America/Sao_Paulo) = Friday 04:00 UTC
     [$dow, $time] = User::convertLocalScheduleToUtc(5, '01:00', new DateTimeZone('America/Sao_Paulo'));

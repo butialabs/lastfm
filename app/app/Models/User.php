@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\MontageService;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use DateTimeZone;
@@ -31,6 +32,12 @@ class User extends Authenticatable
 
     public const PROTOCOL_MASTODON = 'mastodon';
 
+    public const GRID_ARTIST = 'artist';
+
+    public const GRID_ALBUM = 'album';
+
+    public const GRID_SOURCES = [self::GRID_ARTIST, self::GRID_ALBUM];
+
     public const DAYS = [
         1 => 'monday',
         2 => 'tuesday',
@@ -53,6 +60,8 @@ class User extends Authenticatable
         'time',
         'timezone',
         'language',
+        'grid_source',
+        'grid_size',
         'status',
         'callback',
         'social_message',
@@ -70,6 +79,7 @@ class User extends Authenticatable
     {
         return [
             'day_of_week' => 'integer',
+            'grid_size' => 'integer',
             'error_count' => 'integer',
             'send_attempts' => 'integer',
             'created_at' => 'datetime',
@@ -277,22 +287,44 @@ class User extends Authenticatable
             ->format('H:i');
     }
 
+    public function gridSource(): string
+    {
+        return in_array($this->grid_source, self::GRID_SOURCES, true) ? $this->grid_source : self::GRID_ARTIST;
+    }
+
+    public function gridSize(): int
+    {
+        return MontageService::normalizeSize($this->grid_size !== null ? (int) $this->grid_size : null);
+    }
+
     // Montage URLs are /montage/{md5(user_id)} — preserved from the legacy app.
-    public static function montageUrlToFilePath(string $montageUrl): ?string
+    public static function montageKey(string $montageUrl): ?string
     {
         if (preg_match('#^/montage/([a-f0-9]{32})$#i', $montageUrl, $matches)) {
-            return Storage::disk('montage')->path($matches[1].'.jpg');
+            return strtolower($matches[1]).'.jpg';
         }
 
         return null;
     }
 
+    public static function montageContents(string $montageUrl): ?string
+    {
+        $key = static::montageKey($montageUrl);
+        if ($key === null || ! Storage::disk('montage')->exists($key)) {
+            return null;
+        }
+
+        $bin = Storage::disk('montage')->get($key);
+
+        return is_string($bin) && $bin !== '' ? $bin : null;
+    }
+
     public function deleteMontageFile(?string $montageUrl): void
     {
-        $path = $montageUrl !== null ? static::montageUrlToFilePath($montageUrl) : null;
+        $key = $montageUrl !== null ? static::montageKey($montageUrl) : null;
 
-        if ($path !== null && is_file($path)) {
-            @unlink($path);
+        if ($key !== null) {
+            Storage::disk('montage')->delete($key);
         }
     }
 }

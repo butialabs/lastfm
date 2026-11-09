@@ -2,7 +2,7 @@
 set -e
 
 DATA_DIR="${APP_BASE_DIR}/data"
-DIRS="$DATA_DIR/db $DATA_DIR/cache/artists $DATA_DIR/logs $DATA_DIR/montage"
+DIRS="$DATA_DIR/db $DATA_DIR/cache/artists $DATA_DIR/cache/albums $DATA_DIR/logs $DATA_DIR/montage"
 
 mkdir -p $DIRS 2>/dev/null || true
 

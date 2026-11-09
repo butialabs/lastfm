@@ -4,27 +4,38 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MontageController extends Controller
 {
-    // Serves data/montage/{hash}.jpg — public route preserved from the legacy
-    // app (filename = md5(user_id)).
-    public function show(string $hash): BinaryFileResponse
+    // Serves {hash}.jpg from the "montage" disk (local or S3) — public route
+    // preserved from the legacy app (filename = md5(user_id)).
+    public function show(string $hash): Response
     {
         abort_unless(preg_match('/^[a-f0-9]{32}$/i', $hash) === 1, 404);
 
-        $path = Storage::disk('montage')->path(strtolower($hash).'.jpg');
-        abort_unless(is_file($path), 404);
+        $disk = Storage::disk('montage');
+        $key = strtolower($hash).'.jpg';
+        abort_unless($disk->exists($key), 404);
 
-        $mtime = (int) filemtime($path);
+        $bin = $disk->get($key);
+        abort_unless(is_string($bin) && $bin !== '', 404);
 
-        return response()->file($path, [
+        $mtime = (int) $disk->lastModified($key);
+        $etag = sprintf('"%s"', md5($hash.$mtime));
+
+        $headers = [
             'Content-Type' => 'image/jpeg',
             'Cache-Control' => 'public, max-age=86400',
             'Last-Modified' => gmdate('D, d M Y H:i:s', $mtime).' GMT',
-            'ETag' => sprintf('"%s"', md5($hash.$mtime)),
-        ]);
+            'ETag' => $etag,
+        ];
+
+        if (request()->header('If-None-Match') === $etag) {
+            return response('', 304, $headers);
+        }
+
+        return response($bin, 200, $headers + ['Content-Length' => (string) strlen($bin)]);
     }
 }

@@ -9,10 +9,6 @@ return [
 
     'user_agent' => env('LASTFM_USER_AGENT', 'LastFM.butialabs.com/1.0'),
 
-    // Key of the old scheme (aes-256-cbc + HMAC), used ONLY by lastfm:import-legacy
-    // to decrypt legacy credentials before re-encrypting them with APP_KEY.
-    'encryption_key' => env('ENCRYPTION_KEY'),
-
     // Consecutive failed weeks before the user is set to ERROR and stops being
     // scheduled. Reset by a successful send, a panel visit or saving settings.
     'max_error_count' => (int) env('MAX_ERROR_COUNT', 3),
@@ -34,10 +30,14 @@ return [
 
     'images' => [
         'placeholder_retry_days' => (int) env('IMAGE_PLACEHOLDER_RETRY_DAYS', 30),
+        'size' => (int) env('IMAGE_SIZE', 600),
+        'quality' => (int) env('IMAGE_QUALITY', 80),
+        'format' => env('IMAGE_FORMAT', 'webp'),
     ],
 
     'post' => [
-        // Number of artists shown in the post and in the montage.
+        // Default number of items in the post and the montage (users pick
+        // their own grid size in the settings).
         'chart_size' => 5,
 
         'protocols' => [

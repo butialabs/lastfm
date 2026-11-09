@@ -51,6 +51,13 @@
 				</p>
 			</div>
 			<div>
+				{{ __('messages.settings.grid_source') }}
+				<p>
+					{{ __($user->gridSource() === 'album' ? 'messages.settings.grid_album' : 'messages.settings.grid_artist') }}
+					({{ sprintf(__('messages.settings.grid_items'), $user->gridSize()) }})
+				</p>
+			</div>
+			<div>
 				<button type="button" id="edit" wire:click="edit">{{ __('messages.settings.edit') }}</button>
 			</div>
 		</div>
@@ -79,6 +86,17 @@
 						@endforeach
 					</select>
 				</div>
+				<div class="form-row">
+					<select id="grid_source" wire:model="grid_source" aria-label="{{ __('messages.settings.grid_source') }}" required>
+						<option value="artist">{{ __('messages.settings.grid_artist') }}</option>
+						<option value="album">{{ __('messages.settings.grid_album') }}</option>
+					</select>
+					<select id="grid_size" wire:model="grid_size" aria-label="{{ __('messages.settings.grid_size') }}" required>
+						@foreach ($gridSizes as $size)
+							<option value="{{ $size }}">{{ sprintf(__('messages.settings.grid_items'), $size) }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 			@error('lastfm_username')
 				<div class="alert alert--danger">{{ $message }}</div>
@@ -87,6 +105,12 @@
 				<div class="alert alert--danger">{{ $message }}</div>
 			@enderror
 			@error('timezone')
+				<div class="alert alert--danger">{{ $message }}</div>
+			@enderror
+			@error('grid_source')
+				<div class="alert alert--danger">{{ $message }}</div>
+			@enderror
+			@error('grid_size')
 				<div class="alert alert--danger">{{ $message }}</div>
 			@enderror
 			@error('save')

@@ -27,15 +27,6 @@ return [
             'transaction_mode' => 'DEFERRED',
         ],
 
-        // Pre-Laravel database, read only by lastfm:import-legacy.
-        'legacy' => [
-            'driver' => 'sqlite',
-            'database' => $resolvePath(env('SQLITE_PATH', 'data/db/lastfm.sqlite')),
-            'prefix' => '',
-            'foreign_key_constraints' => false,
-            'busy_timeout' => 5000,
-        ],
-
     ],
 
 ];

@@ -28,6 +28,11 @@ return [
     'settings.confirm_delete' => 'Voulez-vous vraiment supprimer votre compte ?',
     'settings.saved' => 'Paramètres enregistrés.',
     'settings.last_update' => 'Dernière mise à jour',
+    'settings.grid_source' => 'Images de la grille',
+    'settings.grid_size' => 'Taille de la grille',
+    'settings.grid_artist' => 'Photos des artistes',
+    'settings.grid_album' => 'Pochettes d\'albums',
+    'settings.grid_items' => '%d images',
     'settings.with_montage' => 'avec',
     'settings.montage' => 'montage',
 
@@ -45,10 +50,12 @@ return [
     'status.sending' => 'Votre publication est en cours d\'envoi.',
     'status.error' => 'Une erreur est survenue. Le système réessaiera lors de la prochaine routine.',
 
-    'post.top_artists' => 'Top 5 des artistes de la semaine dernière',
+    'post.top_artists' => 'Top %d des artistes de la semaine dernière',
+    'post.top_albums' => 'Top %d des albums de la semaine dernière',
     'post.scrobbles' => '%d Scrobbles avec Last.fm',
     'post.via' => 'via',
     'post.alt_text' => 'Collage de photos des groupes %s',
+    'post.alt_text_albums' => 'Collage des pochettes d\'albums %s',
 
     'auth.logged_out' => 'Déconnecté.',
 

@@ -7,17 +7,19 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Artist;
 use App\Services\LastFm\ArtistImageFetcher;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Illuminate\Http\Response;
 
 class ArtistImageController extends Controller
 {
-    public function show(Artist $artist, ArtistImageFetcher $images): BinaryFileResponse
+    public function show(Artist $artist, ArtistImageFetcher $images): Response
     {
-        $path = $images->cachedPath($artist);
-        abort_if($path === null || ! is_file($path), 404);
+        $bin = $images->cachedImage($artist);
+        abort_if($bin === null, 404);
 
-        return response()->file($path, [
-            'Content-Type' => 'image/jpeg',
+        $info = @getimagesizefromstring($bin);
+
+        return response($bin, 200, [
+            'Content-Type' => $info !== false ? $info['mime'] : 'application/octet-stream',
             'Cache-Control' => 'private, max-age=3600',
         ]);
     }

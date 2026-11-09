@@ -28,6 +28,11 @@ return [
     'settings.confirm_delete' => 'Do you really want to delete your account?',
     'settings.saved' => 'Settings saved.',
     'settings.last_update' => 'Last update',
+    'settings.grid_source' => 'Grid images',
+    'settings.grid_size' => 'Grid size',
+    'settings.grid_artist' => 'Artist photos',
+    'settings.grid_album' => 'Album covers',
+    'settings.grid_items' => '%d images',
     'settings.with_montage' => 'with',
     'settings.montage' => 'montage',
 
@@ -45,10 +50,12 @@ return [
     'status.sending' => 'Your post is currently being sent.',
     'status.error' => 'An error occurred. The system will try again in the next routine.',
 
-    'post.top_artists' => 'Top 5 artists of the Last.week',
+    'post.top_artists' => 'Top %d artists of the Last.week',
+    'post.top_albums' => 'Top %d albums of the Last.week',
     'post.scrobbles' => '%d Scrobbles with Lastfm',
     'post.via' => 'via',
     'post.alt_text' => 'Collage of photos of the bands %s',
+    'post.alt_text_albums' => 'Collage of the album covers %s',
 
     'auth.logged_out' => 'Logged out.',
 

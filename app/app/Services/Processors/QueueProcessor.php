@@ -70,21 +70,21 @@ final class QueueProcessor
             $language = (string) ($user->language ?? 'en');
             $montagePath = (string) ($user->social_montage ?? '');
 
-            $montageFilePath = User::montageUrlToFilePath($montagePath);
-            if ($montageFilePath === null || ! is_file($montageFilePath)) {
+            $montage = User::montageContents($montagePath);
+            if ($montage === null) {
                 throw new \RuntimeException('Montage file not found');
             }
 
-            $chart = $this->charts->forUser((string) ($user->lastfm_username ?? ''));
+            $post = $this->chartForPost($user);
 
-            $text = $this->buildPostText($chart, $language, $protocol);
+            $text = $this->buildPostText($post, $language, $protocol);
             $threads = $this->splitText($text, $protocol);
-            $altText = $this->generateAltText($chart['artists'], $language);
+            $altText = $this->generateAltText($post, $language);
 
             if ($protocol === User::PROTOCOL_AT) {
                 $password = Crypt::decryptString((string) $user->password);
                 $session = $this->bluesky->createSession($instance, (string) $user->username, $password);
-                $imageData = $this->bluesky->uploadImage($instance, $session['accessJwt'], $montageFilePath);
+                $imageData = $this->bluesky->uploadImage($instance, $session['accessJwt'], $montage);
 
                 $root = null;
                 $parent = null;
@@ -96,7 +96,7 @@ final class QueueProcessor
                 }
             } elseif ($protocol === User::PROTOCOL_MASTODON) {
                 $token = Crypt::decryptString((string) $user->token);
-                $mediaId = $this->mastodon->uploadMedia($instance, $token, $montageFilePath, $altText);
+                $mediaId = $this->mastodon->uploadMedia($instance, $token, $montage, $altText);
 
                 $inReplyTo = null;
                 foreach ($threads as $i => $chunk) {
@@ -127,19 +127,51 @@ final class QueueProcessor
     }
 
     /**
-     * @param  array{artists: list<array{name:string,playcount:int}>, total_scrobbles: int}  $chart
+     * The same chart the montage was built from, flattened for the post.
+     *
+     * @return array{mode: string, items: list<array{name:string,playcount:int}>, total_scrobbles: int}
      */
-    private function buildPostText(array $chart, string $language, string $protocol): string
+    private function chartForPost(User $user): array
     {
-        $artistParts = [];
-        foreach ($chart['artists'] as $a) {
-            $artistParts[] = sprintf('%s (%d)', $a['name'], $a['playcount']);
+        $username = (string) ($user->lastfm_username ?? '');
+        $size = $user->gridSize();
+
+        if ($user->gridSource() === User::GRID_ALBUM) {
+            $chart = $this->charts->albumsForUser($username, $size);
+            $items = array_map(static fn (array $a) => [
+                'name' => $a['name'].' – '.$a['artist'],
+                'playcount' => $a['playcount'],
+            ], $chart['albums']);
+        } else {
+            $chart = $this->charts->forUser($username, $size);
+            $items = array_map(static fn (array $a) => [
+                'name' => $a['name'],
+                'playcount' => $a['playcount'],
+            ], $chart['artists']);
         }
 
-        $artistList = implode(' ', $artistParts);
-        $scrobblesText = sprintf(__('messages.post.scrobbles', [], $language), $chart['total_scrobbles']);
+        return [
+            'mode' => $user->gridSource(),
+            'items' => $items,
+            'total_scrobbles' => $chart['total_scrobbles'],
+        ];
+    }
 
-        $prefix = sprintf('♫ %s: ', __('messages.post.top_artists', [], $language));
+    /**
+     * @param  array{mode: string, items: list<array{name:string,playcount:int}>, total_scrobbles: int}  $post
+     */
+    private function buildPostText(array $post, string $language, string $protocol): string
+    {
+        $parts = [];
+        foreach ($post['items'] as $item) {
+            $parts[] = sprintf('%s (%d)', $item['name'], $item['playcount']);
+        }
+
+        $list = implode(' ', $parts);
+        $scrobblesText = sprintf(__('messages.post.scrobbles', [], $language), $post['total_scrobbles']);
+
+        $titleKey = $post['mode'] === User::GRID_ALBUM ? 'messages.post.top_albums' : 'messages.post.top_artists';
+        $prefix = sprintf('♫ %s: ', sprintf(__($titleKey, [], $language), count($post['items'])));
         $suffix = sprintf(
             '. #myweekcounted %s #music %s %s',
             $scrobblesText,
@@ -148,22 +180,21 @@ final class QueueProcessor
         );
 
         $available = $this->maxLength($protocol) - mb_strlen($prefix) - mb_strlen($suffix);
-        if ($available > 3 && mb_strlen($artistList) > $available) {
-            $artistList = rtrim(mb_substr($artistList, 0, $available - 3)).'...';
+        if ($available > 3 && mb_strlen($list) > $available) {
+            $list = rtrim(mb_substr($list, 0, $available - 3)).'...';
         }
 
-        return $prefix.$artistList.$suffix;
+        return $prefix.$list.$suffix;
     }
 
     /**
-     * @param  list<array{name:string}>  $artists
+     * @param  array{mode: string, items: list<array{name:string}>}  $post
      */
-    private function generateAltText(array $artists, string $language): string
+    private function generateAltText(array $post, string $language): string
     {
-        return sprintf(
-            __('messages.post.alt_text', [], $language),
-            implode(', ', array_column($artists, 'name'))
-        );
+        $key = $post['mode'] === User::GRID_ALBUM ? 'messages.post.alt_text_albums' : 'messages.post.alt_text';
+
+        return sprintf(__($key, [], $language), implode(', ', array_column($post['items'], 'name')));
     }
 
     private function protocolSetting(string $protocol, string $key): string

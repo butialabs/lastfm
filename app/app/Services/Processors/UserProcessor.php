@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Processors;
 
 use App\Models\User;
+use App\Services\LastFm\AlbumImageFetcher;
 use App\Services\LastFm\ArtistImageFetcher;
 use App\Services\LastFm\WeeklyChartService;
 use App\Services\MontageService;
@@ -14,7 +15,8 @@ final class UserProcessor
 {
     public function __construct(
         private readonly WeeklyChartService $charts,
-        private readonly ArtistImageFetcher $images,
+        private readonly ArtistImageFetcher $artistImages,
+        private readonly AlbumImageFetcher $albumImages,
         private readonly MontageService $montage,
     ) {}
 
@@ -48,7 +50,7 @@ final class UserProcessor
     }
 
     /**
-     * Fetch weekly chart, resolve images and build the montage → QUEUED.
+     * Fetch the weekly chart (artists or albums), resolve images and build the montage → QUEUED.
      */
     public function processUser(User $user): bool
     {
@@ -64,20 +66,29 @@ final class UserProcessor
                 return false;
             }
 
-            $chart = $this->charts->forUser($lastfmUsername, userId: $userId);
+            $size = $user->gridSize();
 
-            if ($chart['artists'] === []) {
+            if ($user->gridSource() === User::GRID_ALBUM) {
+                $chart = $this->charts->albumsForUser($lastfmUsername, $size, $userId);
+                $images = array_map(
+                    fn (array $album) => $this->albumImages->imageFor($album['artist'], $album['name'], $album['mbid']),
+                    $chart['albums'],
+                );
+            } else {
+                $chart = $this->charts->forUser($lastfmUsername, $size, $userId);
+                $images = array_map(
+                    fn (array $artist) => $this->artistImages->imageFor($artist['name'], $artist['mbid']),
+                    $chart['artists'],
+                );
+            }
+
+            if ($images === []) {
                 $user->setCallback('No weekly chart data');
 
                 return false;
             }
 
-            $paths = [];
-            foreach ($chart['artists'] as $artist) {
-                $paths[] = $this->images->pathFor($artist['name'], $artist['mbid']);
-            }
-
-            $montagePath = $this->montage->createWeeklyMontage($userId, $paths);
+            $montagePath = $this->montage->createWeeklyMontage($userId, $images, $size);
 
             $user->refresh()->markQueued($montagePath, resetAttempts: true);
             $user->setCallback('Queued successfully');

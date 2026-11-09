@@ -5,39 +5,38 @@ declare(strict_types=1);
 namespace App\Services\LastFm;
 
 use App\Models\Artist;
-use Illuminate\Support\Carbon;
+use App\Services\LastFm\Concerns\TracksImageHash;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Resolves artist images, coordinating the scraper, the filesystem cache and
- * the artists.image_hash bookkeeping.
- *
- * image_hash holds either the cache hash, the PLACEHOLDER_HASH sentinel (the
- * download failed or Last.fm served a stub image) or null/'' when nothing has
- * been fetched yet. A placeholder is attempted again once it is older than
- * placeholder_retry_days, the next time the artist shows up in a chart.
+ * Resolves artist images, coordinating the scraper, the image cache and the
+ * artists.image_hash bookkeeping (see TracksImageHash). Images are returned as
+ * binary contents so the cache can live on any disk (local or S3).
  */
 final class ArtistImageFetcher
 {
+    use TracksImageHash;
+
     public function __construct(
         private readonly ArtistImageScraper $scraper,
         private readonly ArtistImageCache $cache,
     ) {}
 
     /**
-     * Local cached path, without triggering any download.
+     * Cached image contents, without triggering any download.
      */
-    public function cachedPath(Artist $artist): ?string
+    public function cachedImage(Artist $artist): ?string
     {
         $hash = ! empty($artist->image_hash)
             ? $artist->image_hash
             : $this->cache->hashFor($artist->name);
 
         if ($hash === Artist::PLACEHOLDER_HASH) {
-            return is_file($this->cache->placeholderPath()) ? $this->cache->placeholderPath() : null;
+            return $this->cache->placeholderBytes();
         }
 
-        if (! $this->cache->has($hash)) {
+        $bin = $this->cache->get($hash);
+        if ($bin === null) {
             return null;
         }
 
@@ -45,30 +44,30 @@ final class ArtistImageFetcher
             $artist->update(['image_hash' => $hash]);
         }
 
-        return $this->cache->pathFor($hash);
+        return $bin;
     }
 
     /**
-     * Cached path for an artist, downloading it on a cache miss. A failed
-     * download serves the placeholder ('' only if the placeholder file is missing).
+     * Image contents for an artist, downloading it on a cache miss. A failed
+     * download serves the placeholder (null only if the placeholder file is missing).
      */
-    public function pathFor(string $artistName, ?string $mbid = null): string
+    public function imageFor(string $artistName, ?string $mbid = null): ?string
     {
         $artist = Artist::where('name', $artistName)->first();
         $hash = $this->cache->hashFor($artistName);
 
         if ($artist && ! empty($artist->image_hash)) {
             if ($artist->image_hash === Artist::PLACEHOLDER_HASH) {
-                if (! $this->placeholderExpired($artist) && is_file($this->cache->placeholderPath())) {
-                    return $this->cache->placeholderPath();
+                if (! $this->placeholderExpired($artist)) {
+                    return $this->cache->placeholderBytes();
                 }
-            } elseif ($this->cache->has($artist->image_hash)) {
-                return $this->cache->pathFor($artist->image_hash);
+            } elseif (($bin = $this->cache->get($artist->image_hash)) !== null) {
+                return $bin;
             }
-        } elseif ($this->cache->has($hash)) {
+        } elseif (($bin = $this->cache->get($hash)) !== null) {
             $artist?->update(['image_hash' => $hash]);
 
-            return $this->cache->pathFor($hash);
+            return $bin;
         }
 
         $artist ??= Artist::create([
@@ -78,27 +77,17 @@ final class ArtistImageFetcher
             'image_hash' => null,
         ]);
 
-        $result = $this->fetchAndStore($artistName, $hash);
+        $outcome = $this->fetchAndStore($artistName, $hash);
 
-        if ($result === '') {
-            $this->markPlaceholder($artist);
+        if ($outcome !== self::STORED) {
+            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
 
-            return is_file($this->cache->placeholderPath()) ? $this->cache->placeholderPath() : '';
+            return $this->cache->placeholderBytes();
         }
 
-        $this->rememberHash($artist, $result === $this->cache->placeholderPath() ? Artist::PLACEHOLDER_HASH : $hash);
+        $this->rememberHash($artist, $hash);
 
-        return $result;
-    }
-
-    private function placeholderExpired(Artist $artist): bool
-    {
-        return $artist->updated_at !== null && $artist->updated_at->lt($this->placeholderCutoff());
-    }
-
-    private function placeholderCutoff(): Carbon
-    {
-        return now()->subDays((int) config('lastfm.images.placeholder_retry_days', 30));
+        return $this->cache->get($hash);
     }
 
     /**
@@ -122,25 +111,25 @@ final class ArtistImageFetcher
             $this->cache->forget($hash);
         }
 
-        $result = $this->fetchAndStore($artist->name, $hash);
+        $outcome = $this->fetchAndStore($artist->name, $hash);
 
-        if ($result === '') {
+        if ($outcome === self::FAILED) {
             Log::channel('artist_images')->warning('Artist image download failed', [
                 'artistId' => $artistId,
                 'artist' => $artist->name,
             ]);
-            $this->markPlaceholder($artist);
+            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
 
             return false;
         }
 
-        $isPlaceholder = $result === $this->cache->placeholderPath();
+        $isPlaceholder = $outcome === self::PLACEHOLDER;
         $this->rememberHash($artist, $isPlaceholder ? Artist::PLACEHOLDER_HASH : $hash);
 
         Log::channel('artist_images')->info('Artist image download succeeded', [
             'artistId' => $artistId,
             'artist' => $artist->name,
-            'path' => $result,
+            'key' => $isPlaceholder ? null : $this->cache->keyFor($hash),
             'isPlaceholder' => $isPlaceholder,
         ]);
 
@@ -170,7 +159,7 @@ final class ArtistImageFetcher
                 'artist' => $artist->name,
                 'url' => $imageUrl,
             ]);
-            $this->markPlaceholder($artist);
+            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
 
             return false;
         }
@@ -185,7 +174,12 @@ final class ArtistImageFetcher
             return true;
         }
 
-        $this->cache->put($hash, $bin);
+        if (! $this->store($hash, $bin, $artist->name, $imageUrl)) {
+            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
+
+            return false;
+        }
+
         $this->rememberHash($artist, $hash);
 
         Log::channel('artist_images')->info('Downloaded image from URL', [
@@ -197,18 +191,18 @@ final class ArtistImageFetcher
     }
 
     /**
-     * Returns the stored path, the placeholder path, or '' on failure.
+     * @return self::STORED|self::PLACEHOLDER|self::FAILED
      */
     private function fetchAndStore(string $artistName, string $hash): string
     {
         $imageUrl = $this->scraper->imageUrlFor($artistName);
         if ($imageUrl === null || $imageUrl === '') {
-            return '';
+            return self::FAILED;
         }
 
         $bin = $this->scraper->download($imageUrl, $artistName);
         if ($bin === null) {
-            return '';
+            return self::FAILED;
         }
 
         if ($this->cache->isPlaceholder($bin)) {
@@ -217,27 +211,26 @@ final class ArtistImageFetcher
                 'url' => $imageUrl,
             ]);
 
-            return $this->cache->placeholderPath();
+            return self::PLACEHOLDER;
         }
 
-        return $this->cache->put($hash, $bin);
+        return $this->store($hash, $bin, $artistName, $imageUrl) ? self::STORED : self::FAILED;
     }
 
-    private function markPlaceholder(Artist $artist): void
+    private function store(string $hash, string $bin, string $artistName, string $imageUrl): bool
     {
-        $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
-    }
+        try {
+            $this->cache->put($hash, $bin);
 
-    private function rememberHash(Artist $artist, string $hash): void
-    {
-        if ($artist->image_hash !== $hash) {
-            $artist->update(['image_hash' => $hash]);
+            return true;
+        } catch (\RuntimeException $e) {
+            Log::channel('artist_images')->warning('Downloaded image could not be stored', [
+                'artist' => $artistName,
+                'url' => $imageUrl,
+                'error' => $e->getMessage(),
+            ]);
 
-            return;
+            return false;
         }
-
-        // Same outcome as last time — refresh the timestamp so a placeholder
-        // does not stay permanently expired.
-        $artist->touch();
     }
 }
