@@ -340,11 +340,17 @@ class User extends Authenticatable
     public static function montageContents(string $montageUrl): ?string
     {
         $key = static::montageKey($montageUrl);
-        if ($key === null || ! Storage::disk('montage')->exists($key)) {
+        if ($key === null) {
             return null;
         }
 
-        $bin = Storage::disk('montage')->get($key);
+        try {
+            $bin = Storage::disk('montage')->get($key);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
 
         return is_string($bin) && $bin !== '' ? $bin : null;
     }

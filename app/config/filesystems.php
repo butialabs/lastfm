@@ -24,7 +24,7 @@ $imageDisk = static function (string $localRoot, string $prefix): array {
         'root' => $base !== '' ? $base.'/'.$prefix : $prefix,
         'visibility' => 'private',
         'throw' => false,
-        'report' => false,
+        'report' => true,
     ];
 };
 

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Storage;
 
 class MontageController extends Controller
 {
@@ -15,20 +15,14 @@ class MontageController extends Controller
     {
         abort_unless(preg_match('/^[a-f0-9]{32}$/i', $hash) === 1, 404);
 
-        $disk = Storage::disk('montage');
-        $key = strtolower($hash).'.jpg';
-        abort_unless($disk->exists($key), 404);
+        $bin = User::montageContents('/montage/'.$hash);
+        abort_if($bin === null, 404);
 
-        $bin = $disk->get($key);
-        abort_unless(is_string($bin) && $bin !== '', 404);
-
-        $mtime = (int) $disk->lastModified($key);
-        $etag = sprintf('"%s"', md5($hash.$mtime));
+        $etag = sprintf('"%s"', md5($bin));
 
         $headers = [
             'Content-Type' => 'image/jpeg',
             'Cache-Control' => 'public, max-age=86400',
-            'Last-Modified' => gmdate('D, d M Y H:i:s', $mtime).' GMT',
             'ETag' => $etag,
         ];
 

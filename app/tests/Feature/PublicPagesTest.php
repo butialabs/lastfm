@@ -87,6 +87,13 @@ it('serves montage images with cache headers', function () {
         ->assertHeader('Cache-Control', 'max-age=86400, public');
 });
 
+it('returns 404 (not 500) when the montage storage fails', function () {
+    Storage::shouldReceive('disk')->with('montage')->andReturnSelf();
+    Storage::shouldReceive('get')->andThrow(new RuntimeException('S3 unreachable'));
+
+    $this->get('/montage/'.md5('42'))->assertNotFound();
+});
+
 it('rejects invalid montage hashes', function () {
     $this->get('/montage/not-a-hash')->assertNotFound();
     $this->get('/montage/'.str_repeat('a', 32))->assertNotFound(); // missing file
