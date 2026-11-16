@@ -7,6 +7,7 @@ namespace App\Filament\Resources\Artists\Actions;
 use App\Models\Artist;
 use App\Services\ImageProviderService;
 use App\Services\LastFm\ArtistImageFetcher;
+use App\Services\LastFm\ImageOutcome;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Placeholder;
@@ -37,7 +38,7 @@ class ArtistImageActions
             ->icon('heroicon-o-arrow-path')
             ->requiresConfirmation()
             ->action(function (Artist $record, ArtistImageFetcher $images): void {
-                self::notify($images->regenerate((int) $record->id));
+                self::notifyOutcome($images->regenerate((int) $record->id));
             });
     }
 
@@ -96,6 +97,19 @@ class ArtistImageActions
 
                 self::notify($images->fromUrl((int) $record->id, (string) $data['url']));
             });
+    }
+
+    public static function notifyOutcome(ImageOutcome $outcome): void
+    {
+        $notification = Notification::make();
+
+        match ($outcome) {
+            ImageOutcome::Stored => $notification->title('Image updated')->success(),
+            ImageOutcome::Placeholder => $notification->title('Last.fm has no image for this item')->warning(),
+            ImageOutcome::Failed => $notification->title('Download failed (blocked or unavailable) — current image kept')->danger(),
+        };
+
+        $notification->send();
     }
 
     public static function notify(bool $ok): void

@@ -28,6 +28,11 @@ class Album extends Model
         return $this->belongsTo(Artist::class, 'artist_name', 'name');
     }
 
+    public function adminImageUrl(): string
+    {
+        return route('admin.albums.image', ['album' => $this, 'v' => $this->updated_at?->timestamp]);
+    }
+
     /**
      * @param  Builder<Album>  $query
      */

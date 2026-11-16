@@ -7,15 +7,38 @@ namespace App\Services\LastFm;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 
 /**
  * Shared transport for every outbound Last.fm request.
  *
- * Last.fm blocks bursts of traffic (403/429), so each request is attempted
- * through the configured proxy twice before falling back to a direct call.
+ * Last.fm blocks bursts of traffic (403/429). With the default policy each
+ * request is attempted through the configured proxy twice before falling back
+ * to a direct call; RequestPolicy::strict() keeps every attempt on the proxy
+ * and pauses a random number of seconds before each one.
+ *
+ * LASTFM_PROXY_URL accepts a comma-separated list; each attempt picks one at
+ * random.
  */
 final class ProxiedHttp
 {
+    private readonly RequestPolicy $policy;
+
+    public function __construct(?RequestPolicy $policy = null)
+    {
+        $this->policy = $policy ?? new RequestPolicy;
+    }
+
+    public function withPolicy(RequestPolicy $policy): self
+    {
+        return new self($policy);
+    }
+
+    public function policy(): RequestPolicy
+    {
+        return $this->policy;
+    }
+
     /**
      * Returns the first response satisfying $isSuccess, or null once every
      * attempt is exhausted.
@@ -23,10 +46,14 @@ final class ProxiedHttp
      * @param  array<string,mixed>  $options
      * @param  callable(Response):bool  $isSuccess
      * @param  array<string,mixed>  $logCtx
+     *
+     * @throws \RuntimeException when the policy requires a proxy and none is configured
      */
     public function get(string $url, array $options, callable $isSuccess, string $context, array $logCtx = []): ?Response
     {
-        foreach ($this->attempts() as $proxy) {
+        foreach ($this->attempts() as $attempt => $proxy) {
+            $this->pause($context, $attempt, $logCtx);
+
             $opts = $options;
             $via = 'direct';
 
@@ -50,6 +77,7 @@ final class ProxiedHttp
                     Log::channel('app')->debug('Last.fm request succeeded', $logCtx + [
                         'context' => $context,
                         'via' => $via,
+                        'attempt' => $attempt + 1,
                         'status' => $res->status(),
                     ]);
 
@@ -59,12 +87,14 @@ final class ProxiedHttp
                 Log::channel('app')->debug('Last.fm request non-success', $logCtx + [
                     'context' => $context,
                     'via' => $via,
+                    'attempt' => $attempt + 1,
                     'status' => $res->status(),
                 ]);
             } catch (\Throwable $e) {
                 Log::channel('app')->warning('Last.fm request failed', $logCtx + [
                     'context' => $context,
                     'via' => $via,
+                    'attempt' => $attempt + 1,
                     'error' => $e->getMessage(),
                 ]);
             }
@@ -75,9 +105,17 @@ final class ProxiedHttp
 
     public function proxyUrl(): ?string
     {
-        $url = trim((string) config('lastfm.proxy_url', ''));
+        return $this->proxyUrls()[0] ?? null;
+    }
 
-        return $url !== '' ? $url : null;
+    /**
+     * @return list<string>
+     */
+    public function proxyUrls(): array
+    {
+        $urls = array_map('trim', explode(',', (string) config('lastfm.proxy_url', '')));
+
+        return array_values(array_filter($urls, static fn (string $u) => $u !== ''));
     }
 
     /**
@@ -85,8 +123,45 @@ final class ProxiedHttp
      */
     private function attempts(): array
     {
-        $proxy = $this->proxyUrl();
+        $proxies = $this->proxyUrls();
 
-        return $proxy !== null ? [$proxy, $proxy, null] : [null];
+        if ($proxies === []) {
+            if (! $this->policy->directFallback) {
+                throw new \RuntimeException('LASTFM_PROXY_URL is required by the current request policy');
+            }
+
+            return [null];
+        }
+
+        $attempts = [];
+        for ($i = 0; $i < max(1, $this->policy->proxyAttempts); $i++) {
+            $attempts[] = $proxies[array_rand($proxies)];
+        }
+
+        if ($this->policy->directFallback) {
+            $attempts[] = null;
+        }
+
+        return $attempts;
+    }
+
+    /**
+     * @param  array<string,mixed>  $logCtx
+     */
+    private function pause(string $context, int $attempt, array $logCtx): void
+    {
+        if (! $this->policy->pauses()) {
+            return;
+        }
+
+        $seconds = random_int($this->policy->minDelay, $this->policy->maxDelay);
+
+        Log::channel('app')->debug('Pausing before Last.fm request', $logCtx + [
+            'context' => $context,
+            'attempt' => $attempt + 1,
+            'seconds' => $seconds,
+        ]);
+
+        Sleep::for($seconds)->seconds();
     }
 }

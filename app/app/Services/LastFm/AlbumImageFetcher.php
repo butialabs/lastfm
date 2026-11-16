@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Resolves album covers: album.getinfo gives the cover URL (Last.fm still
- * serves album art through the API), the binary is downloaded through the
- * same proxy fallback as artist images and cached normalized.
+ * serves album art through the API); when it has none, the og:image of the
+ * public album page is used. The binary is downloaded through the same proxy
+ * fallback as artist images and cached normalized.
  */
 final class AlbumImageFetcher
 {
@@ -24,8 +25,8 @@ final class AlbumImageFetcher
     ) {}
 
     /**
-     * Cover contents, downloading it on a cache miss. A failed download serves
-     * the placeholder (null only if the placeholder file is missing).
+     * Cover contents, downloading it on a cache miss. Without a cover the
+     * placeholder is served (null only if the placeholder file is missing).
      */
     public function imageFor(string $artistName, string $albumName, ?string $mbid = null): ?string
     {
@@ -52,13 +53,23 @@ final class AlbumImageFetcher
             $album->update(['musicbrainz_id' => $mbid]);
         }
 
-        if ($this->fetchAndStore($album, $hash) !== self::STORED) {
-            $this->rememberHash($album, Album::PLACEHOLDER_HASH);
-
+        // A recent failure (Last.fm blocking us) is not retried on every chart.
+        if ($this->recentlyFailed($hash)) {
             return $this->cache->placeholderBytes();
         }
 
-        $this->rememberHash($album, $hash);
+        $outcome = $this->fetchAndStore($album, $hash);
+        $this->applyOutcome($album, $outcome, $hash, Album::PLACEHOLDER_HASH);
+
+        if ($outcome === ImageOutcome::Failed) {
+            $this->rememberFailure($hash);
+        }
+
+        if ($outcome !== ImageOutcome::Stored) {
+            return $this->cache->placeholderBytes();
+        }
+
+        $this->forgetFailure($hash);
 
         return $this->cache->get($hash);
     }
@@ -72,21 +83,28 @@ final class AlbumImageFetcher
         return $this->cache->get($this->cache->hashFor($album->artist_name, $album->name));
     }
 
-    public function regenerate(Album $album): bool
+    /**
+     * Re-download from Last.fm. The current cover is only replaced by a
+     * successful download; a failure leaves the album untouched.
+     */
+    public function regenerate(Album $album): ImageOutcome
     {
         $hash = $this->cache->hashFor($album->artist_name, $album->name);
-        $this->cache->forget($hash);
 
         $outcome = $this->fetchAndStore($album, $hash);
-        $this->rememberHash($album, $outcome === self::STORED ? $hash : Album::PLACEHOLDER_HASH);
+        $this->applyOutcome($album, $outcome, $hash, Album::PLACEHOLDER_HASH);
 
-        Log::channel('artist_images')->info('Album cover download', [
+        if ($outcome === ImageOutcome::Stored) {
+            $this->forgetFailure($hash);
+        }
+
+        Log::channel('artist_images')->{$outcome === ImageOutcome::Failed ? 'warning' : 'info'}('Album cover download', [
             'artist' => $album->artist_name,
             'album' => $album->name,
-            'outcome' => $outcome,
+            'outcome' => $outcome->value,
         ]);
 
-        return $outcome !== self::FAILED;
+        return $outcome;
     }
 
     public function fromUrl(Album $album, string $imageUrl): bool
@@ -111,35 +129,9 @@ final class AlbumImageFetcher
         }
 
         $this->rememberHash($album, $hash);
+        $this->forgetFailure($hash);
 
         return true;
-    }
-
-    /**
-     * @return self::STORED|self::PLACEHOLDER|self::FAILED
-     */
-    private function fetchAndStore(Album $album, string $hash): string
-    {
-        $context = ['artist' => $album->artist_name, 'album' => $album->name];
-
-        try {
-            $imageUrl = $this->api->albumImageUrl($album->artist_name, $album->name, $album->musicbrainz_id);
-        } catch (\RuntimeException $e) {
-            Log::channel('artist_images')->warning('Album info request failed', $context + ['error' => $e->getMessage()]);
-
-            return self::FAILED;
-        }
-
-        if ($imageUrl === null || $imageUrl === '') {
-            return self::FAILED;
-        }
-
-        $original = self::originalSizeUrl($imageUrl);
-        if ($original !== null && $this->downloadAndStore($original, $album, $hash, $context) === self::STORED) {
-            return self::STORED;
-        }
-
-        return $this->downloadAndStore($imageUrl, $album, $hash, $context);
     }
 
     public static function originalSizeUrl(string $url): ?string
@@ -149,19 +141,58 @@ final class AlbumImageFetcher
         return $count === 1 ? $original : null;
     }
 
+    private function fetchAndStore(Album $album, string $hash): ImageOutcome
+    {
+        $context = ['artist' => $album->artist_name, 'album' => $album->name];
+
+        try {
+            $imageUrl = $this->api->albumImageUrl($album->artist_name, $album->name, $album->musicbrainz_id);
+        } catch (\RuntimeException $e) {
+            Log::channel('artist_images')->warning('Album info request failed', $context + ['error' => $e->getMessage()]);
+
+            return ImageOutcome::Failed;
+        }
+
+        if ($imageUrl !== null && $imageUrl !== '' && ! LastFmPlaceholders::matches($imageUrl)) {
+            return $this->downloadCover($imageUrl, $album, $hash, $context);
+        }
+
+        // The API has no cover (or only the default one): try the album page.
+        $lookup = $this->scraper->albumImageUrlFor($album->artist_name, $album->name);
+        if (! $lookup->isFound()) {
+            return $lookup->status;
+        }
+
+        return $this->downloadCover((string) $lookup->url, $album, $hash, $context + ['source' => 'album-page']);
+    }
+
+    /**
+     * Original size first, then the URL as given.
+     *
+     * @param  array<string,string>  $context
+     */
+    private function downloadCover(string $imageUrl, Album $album, string $hash, array $context): ImageOutcome
+    {
+        $original = self::originalSizeUrl($imageUrl);
+        if ($original !== null && $this->downloadAndStore($original, $album, $hash, $context) === ImageOutcome::Stored) {
+            return ImageOutcome::Stored;
+        }
+
+        return $this->downloadAndStore($imageUrl, $album, $hash, $context);
+    }
+
     /**
      * @param  array<string,string>  $context
-     * @return self::STORED|self::PLACEHOLDER|self::FAILED
      */
-    private function downloadAndStore(string $url, Album $album, string $hash, array $context): string
+    private function downloadAndStore(string $url, Album $album, string $hash, array $context): ImageOutcome
     {
         $bin = $this->scraper->download($url, $album->artist_name, 'album-cover');
         if ($bin === null) {
-            return self::FAILED;
+            return ImageOutcome::Failed;
         }
 
         if ($this->cache->isPlaceholder($bin)) {
-            return self::PLACEHOLDER;
+            return ImageOutcome::Placeholder;
         }
 
         try {
@@ -169,9 +200,9 @@ final class AlbumImageFetcher
         } catch (\RuntimeException $e) {
             Log::channel('artist_images')->warning('Album cover could not be stored', $context + ['url' => $url, 'error' => $e->getMessage()]);
 
-            return self::FAILED;
+            return ImageOutcome::Failed;
         }
 
-        return self::STORED;
+        return ImageOutcome::Stored;
     }
 }

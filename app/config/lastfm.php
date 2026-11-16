@@ -5,6 +5,8 @@ return [
     'api_key' => env('LASTFM_API'),
 
     // Image scraping falls back to this proxy: 2 attempts via proxy, then 1 direct.
+    // Accepts a comma-separated list; each attempt picks one at random.
+    // lastfm:images:recheck only ever uses the proxy.
     'proxy_url' => env('LASTFM_PROXY_URL'),
 
     'user_agent' => env('LASTFM_USER_AGENT', 'LastFM.butialabs.com/1.0'),
@@ -30,6 +32,12 @@ return [
 
     'images' => [
         'placeholder_retry_days' => (int) env('IMAGE_PLACEHOLDER_RETRY_DAYS', 30),
+        'failure_retry_hours' => (int) env('IMAGE_FAILURE_RETRY_HOURS', 6),
+        'lastfm_placeholder_ids' => [
+            '2a96cbd8b46e442fc41c2b86b821562f',
+            'c6f59c1e5e7240a4c0d427abd71f3dbb',
+            '4128a6eb29f94943c9d206c08e625904',
+        ],
         'size' => (int) env('IMAGE_SIZE', 600),
         'quality' => (int) env('IMAGE_QUALITY', 80),
         'format' => env('IMAGE_FORMAT', 'webp'),

@@ -48,6 +48,11 @@ class Artist extends Model
         };
     }
 
+    public function adminImageUrl(): string
+    {
+        return route('admin.artists.image', ['artist' => $this, 'v' => $this->updated_at?->timestamp]);
+    }
+
     public function recordStats(int $userId, int $position, int $playCount): ArtistStat
     {
         return $this->stats()->create([

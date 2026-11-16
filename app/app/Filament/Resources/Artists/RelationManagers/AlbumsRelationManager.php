@@ -33,7 +33,7 @@ class AlbumsRelationManager extends RelationManager
             ->columns([
                 ImageColumn::make('cover')
                     ->label('')
-                    ->getStateUsing(fn (Album $record): string => route('admin.albums.image', $record))
+                    ->getStateUsing(fn (Album $record): string => $record->adminImageUrl())
                     ->square()
                     ->imageSize(64)
                     ->extraImgAttributes(['loading' => 'lazy']),
@@ -67,7 +67,7 @@ class AlbumsRelationManager extends RelationManager
                         ->label('Force download')
                         ->icon('heroicon-o-arrow-path')
                         ->requiresConfirmation()
-                        ->action(fn (Album $record, AlbumImageFetcher $images) => ArtistImageActions::notify($images->regenerate($record))),
+                        ->action(fn (Album $record, AlbumImageFetcher $images) => ArtistImageActions::notifyOutcome($images->regenerate($record))),
                     Action::make('cover-from-url')
                         ->label('Set image from URL')
                         ->icon('heroicon-o-link')

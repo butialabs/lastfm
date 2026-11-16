@@ -8,6 +8,7 @@ use App\Filament\Resources\Artists\Actions\ArtistImageActions;
 use App\Models\Album;
 use App\Models\Artist;
 use App\Services\LastFm\ArtistImageFetcher;
+use App\Services\LastFm\ImageOutcome;
 use Filament\Actions\BulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
@@ -30,7 +31,7 @@ class ArtistsTable
             ->columns([
                 ImageColumn::make('image')
                     ->label('')
-                    ->getStateUsing(fn (Artist $record): string => route('admin.artists.image', $record))
+                    ->getStateUsing(fn (Artist $record): string => $record->adminImageUrl())
                     ->square()
                     ->imageSize(48)
                     ->extraImgAttributes(['loading' => 'lazy']),
@@ -41,7 +42,7 @@ class ArtistsTable
                 ImageColumn::make('album_covers')
                     ->label('Albums')
                     ->getStateUsing(fn (Artist $record): array => $record->albums
-                        ->map(fn (Album $album): string => route('admin.albums.image', $album))
+                        ->map(fn (Album $album): string => $album->adminImageUrl())
                         ->all())
                     ->square()
                     ->imageSize(36)
@@ -97,7 +98,7 @@ class ArtistsTable
                     ->action(function ($records, ArtistImageFetcher $images): void {
                         $ok = 0;
                         foreach ($records as $record) {
-                            if ($images->regenerate((int) $record->id)) {
+                            if ($images->regenerate((int) $record->id) === ImageOutcome::Stored) {
                                 $ok++;
                             }
                         }

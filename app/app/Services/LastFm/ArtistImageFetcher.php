@@ -48,8 +48,9 @@ final class ArtistImageFetcher
     }
 
     /**
-     * Image contents for an artist, downloading it on a cache miss. A failed
-     * download serves the placeholder (null only if the placeholder file is missing).
+     * Image contents for an artist, downloading it on a cache miss. Without an
+     * image the placeholder is served (null only if the placeholder file is
+     * missing).
      */
     public function imageFor(string $artistName, ?string $mbid = null): ?string
     {
@@ -77,27 +78,36 @@ final class ArtistImageFetcher
             'image_hash' => null,
         ]);
 
-        $outcome = $this->fetchAndStore($artistName, $hash);
-
-        if ($outcome !== self::STORED) {
-            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
-
+        // A recent failure (Last.fm blocking us) is not retried on every chart.
+        if ($this->recentlyFailed($hash)) {
             return $this->cache->placeholderBytes();
         }
 
-        $this->rememberHash($artist, $hash);
+        $outcome = $this->fetchAndStore($artistName, $hash);
+        $this->applyOutcome($artist, $outcome, $hash, Artist::PLACEHOLDER_HASH);
+
+        if ($outcome === ImageOutcome::Failed) {
+            $this->rememberFailure($hash);
+        }
+
+        if ($outcome !== ImageOutcome::Stored) {
+            return $this->cache->placeholderBytes();
+        }
+
+        $this->forgetFailure($hash);
 
         return $this->cache->get($hash);
     }
 
     /**
-     * Re-download from Last.fm, discarding any cached copy.
+     * Re-download from Last.fm. The current image is only replaced by a
+     * successful download; a failure leaves the artist untouched.
      */
-    public function regenerate(int $artistId): bool
+    public function regenerate(int $artistId): ImageOutcome
     {
         $artist = Artist::find($artistId);
         if (! $artist) {
-            return false;
+            return ImageOutcome::Failed;
         }
 
         Log::channel('artist_images')->info('Artist image download triggered', [
@@ -106,38 +116,26 @@ final class ArtistImageFetcher
         ]);
 
         $hash = $this->cache->hashFor($artist->name);
-
-        if ($artist->image_hash !== Artist::PLACEHOLDER_HASH) {
-            $this->cache->forget($hash);
-        }
-
         $outcome = $this->fetchAndStore($artist->name, $hash);
+        $this->applyOutcome($artist, $outcome, $hash, Artist::PLACEHOLDER_HASH);
 
-        if ($outcome === self::FAILED) {
-            Log::channel('artist_images')->warning('Artist image download failed', [
-                'artistId' => $artistId,
-                'artist' => $artist->name,
-            ]);
-            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
-
-            return false;
+        if ($outcome === ImageOutcome::Stored) {
+            $this->forgetFailure($hash);
         }
 
-        $isPlaceholder = $outcome === self::PLACEHOLDER;
-        $this->rememberHash($artist, $isPlaceholder ? Artist::PLACEHOLDER_HASH : $hash);
-
-        Log::channel('artist_images')->info('Artist image download succeeded', [
+        Log::channel('artist_images')->{$outcome === ImageOutcome::Failed ? 'warning' : 'info'}('Artist image download finished', [
             'artistId' => $artistId,
             'artist' => $artist->name,
-            'key' => $isPlaceholder ? null : $this->cache->keyFor($hash),
-            'isPlaceholder' => $isPlaceholder,
+            'outcome' => $outcome->value,
+            'key' => $outcome === ImageOutcome::Stored ? $this->cache->keyFor($hash) : null,
         ]);
 
-        return true;
+        return $outcome;
     }
 
     /**
-     * Download from an operator-supplied URL (admin panel).
+     * Download from an operator-supplied URL (admin panel). On failure the
+     * current image is kept.
      */
     public function fromUrl(int $artistId, string $imageUrl): bool
     {
@@ -147,40 +145,24 @@ final class ArtistImageFetcher
         }
 
         $hash = $this->cache->hashFor($artist->name);
-
-        if ($artist->image_hash !== Artist::PLACEHOLDER_HASH) {
-            $this->cache->forget($hash);
-        }
-
         $bin = $this->scraper->download($imageUrl, $artist->name, 'image-url-download');
 
-        if ($bin === null) {
+        if ($bin === null || $this->cache->isPlaceholder($bin)) {
             Log::channel('artist_images')->warning('Image URL download failed', [
                 'artist' => $artist->name,
                 'url' => $imageUrl,
+                'reason' => $bin === null ? 'download' : 'too-small',
             ]);
-            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
 
             return false;
         }
 
-        if ($this->cache->isPlaceholder($bin)) {
-            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
-            Log::channel('artist_images')->info('Downloaded image is a placeholder', [
-                'artist' => $artist->name,
-                'url' => $imageUrl,
-            ]);
-
-            return true;
-        }
-
         if (! $this->store($hash, $bin, $artist->name, $imageUrl)) {
-            $this->rememberHash($artist, Artist::PLACEHOLDER_HASH);
-
             return false;
         }
 
         $this->rememberHash($artist, $hash);
+        $this->forgetFailure($hash);
 
         Log::channel('artist_images')->info('Downloaded image from URL', [
             'artist' => $artist->name,
@@ -190,19 +172,17 @@ final class ArtistImageFetcher
         return true;
     }
 
-    /**
-     * @return self::STORED|self::PLACEHOLDER|self::FAILED
-     */
-    private function fetchAndStore(string $artistName, string $hash): string
+    private function fetchAndStore(string $artistName, string $hash): ImageOutcome
     {
-        $imageUrl = $this->scraper->imageUrlFor($artistName);
-        if ($imageUrl === null || $imageUrl === '') {
-            return self::FAILED;
+        $lookup = $this->scraper->imageUrlFor($artistName);
+        if (! $lookup->isFound()) {
+            return $lookup->status;
         }
 
+        $imageUrl = (string) $lookup->url;
         $bin = $this->scraper->download($imageUrl, $artistName);
         if ($bin === null) {
-            return self::FAILED;
+            return ImageOutcome::Failed;
         }
 
         if ($this->cache->isPlaceholder($bin)) {
@@ -211,10 +191,10 @@ final class ArtistImageFetcher
                 'url' => $imageUrl,
             ]);
 
-            return self::PLACEHOLDER;
+            return ImageOutcome::Placeholder;
         }
 
-        return $this->store($hash, $bin, $artistName, $imageUrl) ? self::STORED : self::FAILED;
+        return $this->store($hash, $bin, $artistName, $imageUrl) ? ImageOutcome::Stored : ImageOutcome::Failed;
     }
 
     private function store(string $hash, string $bin, string $artistName, string $imageUrl): bool

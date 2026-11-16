@@ -12,11 +12,21 @@ trait ServesCachedImages
     {
         abort_if($bin === null, 404);
 
+        $etag = '"'.md5($bin).'"';
+        $headers = [
+            'ETag' => $etag,
+            'Cache-Control' => 'private, no-cache',
+        ];
+
+        $sent = array_map(static fn (string $t) => preg_replace('#^W/#', '', $t), request()->getETags());
+        if (in_array($etag, $sent, true) || in_array('*', $sent, true)) {
+            return response('', 304, $headers);
+        }
+
         $info = @getimagesizefromstring($bin);
 
-        return response($bin, 200, [
+        return response($bin, 200, $headers + [
             'Content-Type' => $info !== false ? $info['mime'] : 'application/octet-stream',
-            'Cache-Control' => 'private, max-age=3600',
         ]);
     }
 }

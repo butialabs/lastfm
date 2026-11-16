@@ -9,32 +9,68 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Last.fm removed the artist image API in 2019, so images are read from the
- * og:image meta tag of the public artist page.
+ * og:image meta tag of the public artist page (and of the album page when
+ * album.getinfo has no cover).
  */
 final class ArtistImageScraper
 {
     public function __construct(private readonly ProxiedHttp $http) {}
 
-    public function imageUrlFor(string $artistName): ?string
+    /**
+     * Main artist image, read from og:image of the public artist page.
+     */
+    public function imageUrlFor(string $artistName): ImageLookup
     {
-        $url = ArtistUrl::for($artistName);
+        return $this->pageImage(ArtistUrl::for($artistName), $artistName, 'artist-page');
+    }
 
-        Log::channel('app')->debug('Fetching Last.fm artist page', ['url' => $url]);
+    /**
+     * Album cover from og:image of the public album page (used when the API
+     * has no cover).
+     */
+    public function albumImageUrlFor(string $artistName, string $albumName): ImageLookup
+    {
+        return $this->pageImage(ArtistUrl::forAlbum($artistName, $albumName), $artistName, 'album-page');
+    }
+
+    /**
+     * 404 or Last.fm's default image → none. A 200 page without og:image is
+     * a bot challenge or a broken page, so it counts as a failure (retried),
+     * never as "no image".
+     */
+    private function pageImage(string $url, string $artistName, string $context): ImageLookup
+    {
+        Log::channel('app')->debug('Fetching Last.fm page', ['url' => $url, 'context' => $context]);
 
         // 200 and 404 are definitive answers; anything else triggers the proxy fallback.
         $res = $this->http->get(
             $url,
             $this->browserPageOptions($artistName),
             static fn (Response $r) => in_array($r->status(), [200, 404], true),
-            'artist-page',
-            ['artist' => $artistName]
+            $context,
+            ['artist' => $artistName, 'url' => $url]
         );
 
-        if ($res === null || $res->status() === 404) {
-            return null;
+        if ($res === null) {
+            return ImageLookup::failed();
         }
 
-        return $this->extractOgImage($res->body());
+        if ($res->status() === 404) {
+            return ImageLookup::none();
+        }
+
+        $image = $this->extractOgImage($res->body());
+
+        if ($image === null) {
+            Log::channel('artist_images')->info('Last.fm page has no og:image (possible bot challenge)', [
+                'url' => $url,
+                'context' => $context,
+            ]);
+
+            return ImageLookup::failed();
+        }
+
+        return ImageLookup::found($image);
     }
 
     public function download(string $imageUrl, string $artistName, string $context = 'image-binary'): ?string

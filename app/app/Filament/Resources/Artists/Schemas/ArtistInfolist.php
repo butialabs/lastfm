@@ -17,7 +17,7 @@ class ArtistInfolist
             ->components([
                 ImageEntry::make('image')
                     ->label('')
-                    ->getStateUsing(fn ($record): string => route('admin.artists.image', $record))
+                    ->getStateUsing(fn (Artist $record): string => $record->adminImageUrl())
                     ->square()
                     ->imageSize(160),
                 TextEntry::make('name'),

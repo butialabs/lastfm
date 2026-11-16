@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Album;
 use App\Services\LastFm\AlbumImageFetcher;
+use App\Services\LastFm\ImageOutcome;
 use App\Services\LastFm\LastFmApi;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -60,8 +61,11 @@ it('serves the cache without hitting the network on a second call', function () 
     Http::assertNothingSent();
 });
 
-it('stores the placeholder when the album has no cover', function () {
-    Http::fake(['https://ws.audioscrobbler.com/*' => Http::response(albumInfo(null))]);
+it('stores the placeholder when neither the API nor the album page has a cover', function () {
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(albumInfo(null)),
+        'https://www.last.fm/music/*' => Http::response('gone', 404),
+    ]);
 
     expect($this->images->imageFor('Someone', 'Demo'))->toBe($this->placeholder)
         ->and(Album::where('name', 'Demo')->first()->image_hash)->toBe(Album::PLACEHOLDER_HASH);
@@ -105,7 +109,7 @@ it('re-downloads a cover on regenerate, replacing a placeholder', function () {
         'https://img.test/*' => Http::response($this->cover),
     ]);
 
-    expect($this->images->regenerate($album))->toBeTrue()
+    expect($this->images->regenerate($album))->toBe(ImageOutcome::Stored)
         ->and($album->refresh()->image_hash)->toBe(md5('radiohead|ok computer'))
         ->and(getimagesizefromstring($this->images->cachedImage($album))['mime'])->toBe('image/webp');
 });
@@ -162,3 +166,46 @@ it('builds the original size url only for sized Last.fm CDN urls', function (str
     ['https://lastfm.freetls.fastly.net/i/u/abc.png', null],
     ['https://img.test/cover.jpg', null],
 ]);
+
+it('falls back to the album page og:image when the API has no cover', function () {
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(albumInfo(null)),
+        'https://www.last.fm/music/Radiohead/OK+Computer' => Http::response('<meta property="og:image" content="https://img.test/page.jpg">'),
+        'https://img.test/*' => Http::response($this->cover),
+    ]);
+
+    expect($this->images->imageFor('Radiohead', 'OK Computer'))->not->toBe($this->placeholder)
+        ->and(Album::where('name', 'OK Computer')->first()->image_hash)->toBe(md5('radiohead|ok computer'));
+    Http::assertSent(fn ($r) => $r->url() === 'https://img.test/page.jpg');
+});
+
+it('ignores the Last.fm default cover returned by the API and tries the album page', function () {
+    Http::fake([
+        'https://ws.audioscrobbler.com/*' => Http::response(albumInfo('https://lastfm.freetls.fastly.net/i/u/300x300/c6f59c1e5e7240a4c0d427abd71f3dbb.png')),
+        'https://www.last.fm/music/*' => Http::response('<meta property="og:image" content="https://img.test/page.jpg">'),
+        'https://img.test/*' => Http::response($this->cover),
+    ]);
+
+    $this->images->imageFor('Radiohead', 'Kid A');
+
+    expect(Album::where('name', 'Kid A')->first()->image_hash)->toBe(md5('radiohead|kid a'));
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'c6f59c1e5e7240a4c0d427abd71f3dbb'));
+});
+
+it('does not store the placeholder when the album lookup fails', function () {
+    Http::fake(['https://ws.audioscrobbler.com/*' => Http::response('blocked', 429)]);
+
+    expect($this->images->imageFor('Radiohead', 'Pablo Honey'))->toBe($this->placeholder)
+        ->and(Album::where('name', 'Pablo Honey')->first()->image_hash)->toBeNull();
+});
+
+it('keeps the current cover when regenerating fails', function () {
+    $album = Album::create(['artist_name' => 'Radiohead', 'name' => 'OK Computer', 'image_hash' => md5('radiohead|ok computer')]);
+    Storage::disk('album-cache')->put(md5('radiohead|ok computer').'.webp', 'current');
+
+    Http::fake(['https://ws.audioscrobbler.com/*' => Http::response('blocked', 503)]);
+
+    expect($this->images->regenerate($album))->toBe(ImageOutcome::Failed)
+        ->and($album->refresh()->image_hash)->toBe(md5('radiohead|ok computer'))
+        ->and($this->images->cachedImage($album))->toBe('current');
+});

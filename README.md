@@ -57,11 +57,12 @@ docker compose up -d
 | `ADMIN_PASSWORD` | Initial admin password (seeded on first boot, stored hashed) | First boot |
 | `APP_KEY` | Laravel encryption key (`php artisan key:generate --show`). Auto-generated and persisted in the data volume if omitted | No |
 | `TZ` / `PHP_DATE_TIMEZONE` | Container and PHP timezone (e.g., `America/Sao_Paulo`). Schedules are always stored and compared in UTC | No |
-| `LASTFM_PROXY_URL` | Proxy fallback for Last.fm image scraping (see below) | No |
+| `LASTFM_PROXY_URL` | Proxy fallback for Last.fm image scraping (see below). Accepts a comma-separated list; each attempt picks one at random. Required by `lastfm:images:recheck` | No |
 | `THEAUDIODB_API_KEY` / `FANART_API_KEY` | Alternative artist image providers for the admin panel | No |
 | `MAX_ERROR_COUNT` | Send attempts before giving up until next week (default `3`) | No |
 | `BLUESKY_MENTION` / `MASTODON_MENTION` | Account mentioned in generated posts (defaults to the Butiá Labs accounts) | No |
-| `IMAGE_PLACEHOLDER_RETRY_DAYS` | Days before a placeholder (failed or stub download) is attempted again, when the artist next shows up in a chart (default `30`) | No |
+| `IMAGE_PLACEHOLDER_RETRY_DAYS` | Days before a placeholder (Last.fm has no image) is attempted again, when the artist next shows up in a chart (default `30`) | No |
+| `IMAGE_FAILURE_RETRY_HOURS` | Hours before a failed download (blocked, timeout) is attempted again. Failures never mark the placeholder (default `6`) | No |
 | `IMAGE_STORAGE` | Where montages and cached artist/album images are stored: `local` (default, the data volume) or `s3` | No |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_BUCKET` / `AWS_DEFAULT_REGION` | S3 credentials and bucket, used when `IMAGE_STORAGE=s3` | With S3 |
 | `AWS_ENDPOINT` / `AWS_USE_PATH_STYLE_ENDPOINT` | Custom endpoint for S3-compatible services (Cloudflare R2, MinIO, ...). MinIO usually needs path-style `true` | No |
@@ -172,6 +173,10 @@ php artisan lastfm:files s3 [--delete-source]
 
 # Convert the image cache to the standard format (WebP, square, resized)
 php artisan lastfm:files normalize-cache
+
+# Re-download images stuck on the placeholder
+php artisan lastfm:images:recheck [all|artists|albums] [--missing] [--id=*] [--limit=N]
+    [--attempts=5] [--min-delay=5] [--max-delay=60] [--dry-run]
 ```
 
 Outside Docker, run the scheduler yourself:

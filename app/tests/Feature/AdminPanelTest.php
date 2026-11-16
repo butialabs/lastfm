@@ -199,7 +199,7 @@ it('lists artists with their album covers and without the removed columns', func
         ->assertTableColumnExists('album_covers')
         ->assertTableColumnDoesNotExist('image_hash')
         ->assertTableColumnDoesNotExist('stats_count')
-        ->assertTableColumnStateSet('album_covers', [route('admin.albums.image', $withCover)], $artist)
+        ->assertTableColumnStateSet('album_covers', [$withCover->adminImageUrl()], $artist)
         ->filterTable('has_albums', 'with')
         ->assertCanSeeTableRecords([$artist])
         ->assertCanNotSeeTableRecords([$lonely]);
@@ -242,4 +242,42 @@ it('streams cached album covers to admins only', function () {
         ->get(route('admin.albums.image', $album))
         ->assertOk()
         ->assertHeader('Content-Type', 'image/webp');
+});
+
+it('revalidates admin images with an ETag instead of a long cache', function () {
+    Storage::fake('album-cache');
+    $album = Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'Kid A', 'image_hash' => md5('radiohead|kid a')]);
+    $webp = (string) ImageManager::gd()->create(10, 10)->fill('#00ff00')->toWebp();
+    Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', $webp);
+
+    $this->actingAs($this->admin, 'admin');
+
+    $res = $this->get(route('admin.albums.image', $album))->assertOk();
+    $etag = $res->headers->get('ETag');
+
+    expect($etag)->toBe('"'.md5($webp).'"')
+        ->and($res->headers->get('Cache-Control'))->toContain('no-cache')
+        ->and($res->headers->get('Cache-Control'))->not->toContain('max-age=3600');
+
+    $this->withHeaders(['If-None-Match' => $etag])
+        ->get(route('admin.albums.image', $album))
+        ->assertStatus(304);
+
+    // A new cover changes the ETag, so the browser downloads it again.
+    Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', (string) ImageManager::gd()->create(10, 10)->fill('#ff0000')->toWebp());
+
+    $this->withHeaders(['If-None-Match' => $etag])
+        ->get(route('admin.albums.image', $album))
+        ->assertOk();
+});
+
+it('versions the admin image url with updated_at', function () {
+    $artist = Artist::factory()->create();
+    $before = $artist->adminImageUrl();
+
+    $this->travel(5)->seconds();
+    $artist->touch();
+
+    expect($artist->adminImageUrl())->not->toBe($before)
+        ->and($artist->adminImageUrl())->toContain('v='.$artist->updated_at->timestamp);
 });
