@@ -9,6 +9,8 @@ use App\Services\LastFm\ProxiedHttp;
 use GuzzleHttp\Handler\CurlFactory;
 use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use App\Services\LastFm\RequestPolicy;
+use GuzzleHttp\Handler\CurlFactory;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Artisan;
