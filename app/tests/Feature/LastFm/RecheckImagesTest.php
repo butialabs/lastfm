@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\Artist;
 use App\Services\LastFm\ArtistImageScraper;
 use App\Services\LastFm\ProxiedHttp;
+use App\Services\LastFm\RequestPolicy;
 use GuzzleHttp\Handler\CurlFactory;
 use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use App\Services\LastFm\RequestPolicy;
