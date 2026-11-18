@@ -54,21 +54,8 @@ final class ProxiedHttp
         foreach ($this->attempts() as $attempt => $proxy) {
             $this->pause($context, $attempt, $logCtx);
 
-            $opts = $options;
-            $via = 'direct';
-
-            if ($proxy !== null) {
-                $via = 'proxy';
-                $opts['proxy'] = $proxy;
-                $opts['timeout'] = 25;
-                $opts['connect_timeout'] = 10;
-                // Relaxed for the proxy's own TLS only; the tunnelled request to
-                // Last.fm is still verified end to end.
-                $opts['curl'] = ($opts['curl'] ?? []) + [
-                    CURLOPT_PROXY_SSL_VERIFYPEER => false,
-                    CURLOPT_PROXY_SSL_VERIFYHOST => 0,
-                ];
-            }
+            $opts = $this->requestOptions($options, $proxy);
+            $via = $proxy !== null ? 'proxy' : 'direct';
 
             try {
                 $res = Http::withOptions($opts)->get($url);
@@ -101,6 +88,25 @@ final class ProxiedHttp
         }
 
         return null;
+    }
+
+    /**
+     * @internal public for tests
+     *
+     * @param  array<string,mixed>  $options
+     * @return array<string,mixed>
+     */
+    public function requestOptions(array $options, ?string $proxy): array
+    {
+        if ($proxy === null) {
+            return $options;
+        }
+
+        return [
+            'proxy' => $proxy,
+            'timeout' => 25,
+            'connect_timeout' => 10,
+        ] + $options;
     }
 
     public function proxyUrl(): ?string

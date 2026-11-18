@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use App\Models\Album;
 use App\Models\Artist;
+use App\Services\LastFm\ArtistImageScraper;
 use App\Services\LastFm\ProxiedHttp;
+use GuzzleHttp\Handler\CurlFactory;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use App\Services\LastFm\RequestPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Response;
@@ -33,6 +36,24 @@ it('never falls back to a direct request under the strict policy', function () {
     expect(fn () => $http->get('https://www.last.fm/', [], fn () => true, 'test'))
         ->toThrow(RuntimeException::class);
 });
+
+it('builds proxy options that Guzzle\'s cURL handler accepts', function (string $builder, array $args) {
+    $scraper = app(ArtistImageScraper::class);
+    $base = (fn () => $this->{$builder}(...$args))->call($scraper);
+
+    $options = (new ProxiedHttp)->requestOptions($base, 'https://user:pass@proxy.test:8443');
+
+    expect($options)->not->toHaveKey('curl')
+        ->and($options['proxy'])->toBe('https://user:pass@proxy.test:8443');
+
+    $factory = new CurlFactory(1);
+    $easy = $factory->create(new GuzzleRequest('GET', 'https://www.last.fm/music/Test'), $options);
+    $factory->release($easy);
+    $factory->close();
+})->with([
+    'artist page' => ['browserPageOptions', ['Test']],
+    'image binary' => ['imageBinaryOptions', []],
+]);
 
 it('makes exactly N proxy attempts and pauses before each one', function () {
     Http::fake(['*' => Http::response('blocked', 429)]);

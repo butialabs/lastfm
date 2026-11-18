@@ -99,7 +99,9 @@ class RecheckImagesCommand extends Command
                 return;
             }
 
-            $this->report('artists', $prefix, "#{$artist->id} {$artist->name}", $fetcher->regenerate((int) $artist->id));
+            $label = "#{$artist->id} {$artist->name}";
+            $this->output->write("{$prefix} {$label} … ");
+            $this->report('artists', $label, $fetcher->regenerate((int) $artist->id));
         });
     }
 
@@ -126,7 +128,8 @@ class RecheckImagesCommand extends Command
                 return;
             }
 
-            $this->report('albums', $prefix, $label, $fetcher->regenerate($album));
+            $this->output->write("{$prefix} {$label} … ");
+            $this->report('albums', $label, $fetcher->regenerate($album));
         });
     }
 
@@ -191,7 +194,7 @@ class RecheckImagesCommand extends Command
         }
     }
 
-    private function report(string $type, string $prefix, string $label, ImageOutcome $outcome): void
+    private function report(string $type, string $label, ImageOutcome $outcome): void
     {
         $this->totals[$type][$outcome->value] = ($this->totals[$type][$outcome->value] ?? 0) + 1;
 
@@ -201,7 +204,7 @@ class RecheckImagesCommand extends Command
             ImageOutcome::Failed => '<error>failed</error>',
         };
 
-        $this->line("{$prefix} {$label} → {$tag}");
+        $this->line("→ {$tag}");
 
         Log::channel('artist_images')->info('Image recheck', [
             'type' => $type,
