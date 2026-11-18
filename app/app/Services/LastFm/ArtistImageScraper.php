@@ -42,11 +42,35 @@ final class ArtistImageScraper
     {
         Log::channel('app')->debug('Fetching Last.fm page', ['url' => $url, 'context' => $context]);
 
-        // 200 and 404 are definitive answers; anything else triggers the proxy fallback.
+        // 404, or a 200 carrying og:image, are definitive answers. A 200 without
+        // og:image (bot challenge) is retried like any other failed attempt, on
+        // a fresh connection, so the proxy can hand out another exit IP.
+        $image = null;
         $res = $this->http->get(
             $url,
             $this->browserPageOptions($artistName),
-            static fn (Response $r) => in_array($r->status(), [200, 404], true),
+            function (Response $r) use (&$image, $url, $artistName, $context): bool {
+                if ($r->status() === 404) {
+                    return true;
+                }
+
+                if ($r->status() !== 200) {
+                    return false;
+                }
+
+                $image = $this->extractOgImage($r->body());
+
+                if ($image === null) {
+                    Log::channel('artist_images')->info('Last.fm page has no og:image (possible bot challenge)', [
+                        'artist' => $artistName,
+                        'url' => $url,
+                        'context' => $context,
+                        'bytes' => strlen($r->body()),
+                    ]);
+                }
+
+                return $image !== null;
+            },
             $context,
             ['artist' => $artistName, 'url' => $url]
         );
@@ -57,17 +81,6 @@ final class ArtistImageScraper
 
         if ($res->status() === 404) {
             return ImageLookup::none();
-        }
-
-        $image = $this->extractOgImage($res->body());
-
-        if ($image === null) {
-            Log::channel('artist_images')->info('Last.fm page has no og:image (possible bot challenge)', [
-                'url' => $url,
-                'context' => $context,
-            ]);
-
-            return ImageLookup::failed();
         }
 
         return ImageLookup::found($image);

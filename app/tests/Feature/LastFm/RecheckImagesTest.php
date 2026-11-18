@@ -43,8 +43,8 @@ it('builds proxy options that Guzzle\'s cURL handler accepts', function (string 
 
     $options = (new ProxiedHttp)->requestOptions($base, 'https://user:pass@proxy.test:8443');
 
-    expect($options)->not->toHaveKey('curl')
-        ->and($options['proxy'])->toBe('https://user:pass@proxy.test:8443');
+    expect($options['proxy'])->toBe('https://user:pass@proxy.test:8443')
+        ->and($options['curl'])->toBe([CURLOPT_FRESH_CONNECT => true, CURLOPT_FORBID_REUSE => true]);
 
     $factory = new CurlFactory(1);
     $easy = $factory->create(new GuzzleRequest('GET', 'https://www.last.fm/music/Test'), $options);
@@ -125,6 +125,39 @@ it('recovers placeholder artists through the proxy only', function () {
     // Stuck: page + image; Blocked: 2 attempts on the page.
     Http::assertSentCount(4);
     Sleep::assertSleptTimes(4);
+});
+
+it('retries a 200 page without og:image (bot challenge) until it gets the image', function () {
+    $artist = Artist::factory()->create(['name' => 'Challenged', 'image_hash' => Artist::PLACEHOLDER_HASH]);
+
+    Http::fake([
+        'https://www.last.fm/music/*' => Http::sequence()
+            ->push('<html><head><title>Just a moment...</title></head></html>')
+            ->push('<meta property="og:image" content="https://img.test/a.jpg">'),
+        'https://img.test/*' => Http::response($this->jpeg),
+    ]);
+
+    $this->artisan('lastfm:images:recheck', ['type' => 'artists', '--attempts' => 3])
+        ->expectsOutputToContain('recovered')
+        ->assertSuccessful();
+
+    expect($artist->refresh()->image_hash)->toBe(md5('challenged'));
+
+    // Page twice (challenge, then real page) + image.
+    Http::assertSentCount(3);
+});
+
+it('fails after every attempt returns a bot challenge, keeping the record unchanged', function () {
+    $artist = Artist::factory()->create(['name' => 'Walled', 'image_hash' => Artist::PLACEHOLDER_HASH]);
+
+    Http::fake(['https://www.last.fm/music/*' => Http::response('<html></html>')]);
+
+    $this->artisan('lastfm:images:recheck', ['type' => 'artists', '--attempts' => 3])
+        ->expectsOutputToContain('failed')
+        ->assertSuccessful();
+
+    expect($artist->refresh()->image_hash)->toBe(Artist::PLACEHOLDER_HASH);
+    Http::assertSentCount(3);
 });
 
 it('includes never-fetched records with --missing and honours --id', function () {

@@ -71,11 +71,12 @@ final class ProxiedHttp
                     return $res;
                 }
 
-                Log::channel('app')->debug('Last.fm request non-success', $logCtx + [
+                Log::channel('app')->info('Last.fm request non-success', $logCtx + [
                     'context' => $context,
                     'via' => $via,
                     'attempt' => $attempt + 1,
                     'status' => $res->status(),
+                    'bytes' => strlen($res->body()),
                 ]);
             } catch (\Throwable $e) {
                 Log::channel('app')->warning('Last.fm request failed', $logCtx + [
@@ -102,10 +103,15 @@ final class ProxiedHttp
             return $options;
         }
 
+        $curl = (array) ($options['curl'] ?? []);
+        $curl[CURLOPT_FRESH_CONNECT] = true;
+        $curl[CURLOPT_FORBID_REUSE] = true;
+
         return [
             'proxy' => $proxy,
             'timeout' => 25,
             'connect_timeout' => 10,
+            'curl' => $curl,
         ] + $options;
     }
 
