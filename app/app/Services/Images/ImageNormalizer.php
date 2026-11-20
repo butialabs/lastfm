@@ -7,8 +7,6 @@ namespace App\Services\Images;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Format;
 use Intervention\Image\ImageManager;
-use Intervention\Image\Format;
-use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 /**
  * Standardizes downloaded images before they are cached: square center crop

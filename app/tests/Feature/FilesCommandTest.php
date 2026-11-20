@@ -6,8 +6,6 @@ use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Format;
 use Intervention\Image\ImageManager;
-use Intervention\Image\Format;
-use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 beforeEach(function () {
     foreach (['montage', 'artist-cache', 'album-cache', 'montage-local', 'artist-cache-local', 'album-cache-local'] as $disk) {
