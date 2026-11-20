@@ -1,10 +1,15 @@
-name: 🧪 CI
+name: CI
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to verify for a release
+        type: string
+        required: false
   push:
-    branches: [main]
+    branches: ['**']
   pull_request: {}
-  workflow_call: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,42 +23,64 @@ env:
 
 jobs:
   quality:
-    name: 🔍 Code style and tests
+    name: Code style and tests
     runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app
 
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
-      - name: 🐘 Install PHP
+      - name: Install PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
           extensions: gd, intl, pdo_sqlite, sqlite3, zip
           tools: composer
 
-      - name: 📁 Resolve Composer cache directory
+      - name: Resolve Composer cache directory
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
-      - name: ♻️ Cache Composer packages
-        uses: actions/cache@v4
+      - name: Cache Composer packages
+        uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('app/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: 🛡️ Audit dependencies
+      - name: Audit dependencies
         run: composer audit --no-dev
 
-      - name: 🎨 Check code style
+      - name: Check code style
         run: vendor/bin/pint --test
 
-      - name: 🧪 Run tests
+      - name: Run tests
         run: php artisan test
+
+  image:
+    name: Image smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: app:ci
+          cache-from: type=gha,scope=ci
+          cache-to: type=gha,mode=max,scope=ci
+      - name: Smoke test
+        run: |
+          docker run --rm --entrypoint php app:ci artisan --version | grep -F 'Laravel Framework'
