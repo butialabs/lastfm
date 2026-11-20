@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 uses(RefreshDatabase::class);
 
@@ -22,10 +24,10 @@ beforeEach(function () {
     config(['lastfm.api_key' => 'test-api-key', 'lastfm.proxy_url' => null]);
 
     // A real JPEG over 2KB, so it is not treated as a placeholder image.
-    $this->jpegBinary = (string) ImageManager::gd()
-        ->create(300, 300)
+    $this->jpegBinary = (string) ImageManager::usingDriver(GdDriver::class)
+        ->createImage(300, 300)
         ->fill('#a4666a')
-        ->toJpeg(quality: 90);
+        ->encodeUsingFormat(Format::JPEG, quality: 90);
 
     expect(strlen($this->jpegBinary))->toBeGreaterThan(2048);
 

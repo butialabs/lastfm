@@ -17,6 +17,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -233,7 +235,7 @@ it('shows the albums tab on the artist page', function () {
 it('streams cached album covers to admins only', function () {
     Storage::fake('album-cache');
     $album = Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'Kid A', 'image_hash' => md5('radiohead|kid a')]);
-    $webp = (string) ImageManager::gd()->create(10, 10)->fill('#00ff00')->toWebp();
+    $webp = (string) ImageManager::usingDriver(GdDriver::class)->createImage(10, 10)->fill('#00ff00')->encodeUsingFormat(Format::WEBP);
     Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', $webp);
 
     $this->get(route('admin.albums.image', $album))->assertRedirect();
@@ -247,7 +249,7 @@ it('streams cached album covers to admins only', function () {
 it('revalidates admin images with an ETag instead of a long cache', function () {
     Storage::fake('album-cache');
     $album = Album::factory()->create(['artist_name' => 'Radiohead', 'name' => 'Kid A', 'image_hash' => md5('radiohead|kid a')]);
-    $webp = (string) ImageManager::gd()->create(10, 10)->fill('#00ff00')->toWebp();
+    $webp = (string) ImageManager::usingDriver(GdDriver::class)->createImage(10, 10)->fill('#00ff00')->encodeUsingFormat(Format::WEBP);
     Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', $webp);
 
     $this->actingAs($this->admin, 'admin');
@@ -264,7 +266,7 @@ it('revalidates admin images with an ETag instead of a long cache', function () 
         ->assertStatus(304);
 
     // A new cover changes the ETag, so the browser downloads it again.
-    Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', (string) ImageManager::gd()->create(10, 10)->fill('#ff0000')->toWebp());
+    Storage::disk('album-cache')->put(md5('radiohead|kid a').'.webp', (string) ImageManager::usingDriver(GdDriver::class)->createImage(10, 10)->fill('#ff0000')->encodeUsingFormat(Format::WEBP));
 
     $this->withHeaders(['If-None-Match' => $etag])
         ->get(route('admin.albums.image', $album))

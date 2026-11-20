@@ -6,6 +6,8 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Interfaces\ImageInterface;
 
 final class MontageService
@@ -49,7 +51,7 @@ final class MontageService
 
     public function __construct()
     {
-        $this->images = ImageManager::gd(decodeAnimation: false);
+        $this->images = ImageManager::usingDriver(GdDriver::class, decodeAnimation: false);
     }
 
     public static function normalizeSize(?int $size): int
@@ -66,7 +68,7 @@ final class MontageService
         [$canvasW, $canvasH, $cells] = self::LAYOUTS[self::normalizeSize($size)];
 
         $images = array_values($images);
-        $canvas = $this->images->create($canvasW, $canvasH)->fill('#0b1020');
+        $canvas = $this->images->createImage($canvasW, $canvasH)->fill('#0b1020');
 
         foreach ($cells as $i => [$x, $y, $w, $h]) {
             $this->placeImage($canvas, $images[$i] ?? null, $x, $y, $w, $h);
@@ -85,7 +87,7 @@ final class MontageService
     private function encode(ImageInterface $canvas): string
     {
         foreach (self::QUALITIES as $quality) {
-            $jpeg = (string) $canvas->toJpeg(quality: $quality);
+            $jpeg = (string) $canvas->encodeUsingFormat(Format::JPEG, quality: $quality);
 
             if (strlen($jpeg) <= self::MAX_BYTES) {
                 break;
@@ -101,13 +103,13 @@ final class MontageService
 
         if ($bin !== null && $bin !== '' && $this->fitsInMemory($bin)) {
             try {
-                $img = $this->images->read($bin)->cover($width, $height);
+                $img = $this->images->decodeBinary($bin)->cover($width, $height);
             } catch (\Throwable) {
                 $img = null;
             }
         }
 
-        $canvas->place($img ?? $this->images->create($width, $height)->fill('#243b55'), 'top-left', $x, $y);
+        $canvas->insert($img ?? $this->images->createImage($width, $height)->fill('#243b55'), $x, $y);
     }
 
     private function fitsInMemory(string $bin): bool

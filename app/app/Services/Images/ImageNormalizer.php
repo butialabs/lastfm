@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Images;
 
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 /**
  * Standardizes downloaded images before they are cached: square center crop
@@ -23,7 +25,7 @@ final class ImageNormalizer
 
     public function __construct()
     {
-        $this->images = ImageManager::gd(decodeAnimation: false);
+        $this->images = ImageManager::usingDriver(GdDriver::class, decodeAnimation: false);
     }
 
     /**
@@ -47,7 +49,7 @@ final class ImageNormalizer
         }
 
         try {
-            $img = $this->images->read($bin);
+            $img = $this->images->decodeBinary($bin);
         } catch (\Throwable $e) {
             throw new \RuntimeException('Not a decodable image: '.$e->getMessage(), 0, $e);
         }
@@ -58,8 +60,8 @@ final class ImageNormalizer
         $quality = (int) config('lastfm.images.quality', 80);
 
         return $this->format() === 'webp'
-            ? (string) $img->toWebp(quality: $quality)
-            : (string) $img->toJpeg(quality: $quality);
+            ? (string) $img->encodeUsingFormat(Format::WEBP, quality: $quality)
+            : (string) $img->encodeUsingFormat(Format::JPEG, quality: $quality);
     }
 
     public function extension(): string

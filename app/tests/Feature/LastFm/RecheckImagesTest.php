@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Sleep;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 uses(RefreshDatabase::class);
 
@@ -25,7 +27,7 @@ beforeEach(function () {
     Sleep::fake();
     config(['lastfm.api_key' => 'test-api-key', 'lastfm.proxy_url' => 'http://proxy.test:8080']);
 
-    $this->jpeg = (string) ImageManager::gd()->create(600, 600)->fill('#123456')->toJpeg(quality: 100);
+    $this->jpeg = (string) ImageManager::usingDriver(GdDriver::class)->createImage(600, 600)->fill('#123456')->encodeUsingFormat(Format::JPEG, quality: 100);
 });
 
 it('never falls back to a direct request under the strict policy', function () {

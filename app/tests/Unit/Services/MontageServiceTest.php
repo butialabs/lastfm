@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Services\MontageService;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 beforeEach(function () {
     Storage::fake('montage');
@@ -18,11 +20,11 @@ function montageSize(int $userId): array
 }
 
 it('builds a montage from an animated gif using only the first frame', function () {
-    $gif = ImageManager::gd()->animate(function ($animation) {
+    $gif = ImageManager::usingDriver(GdDriver::class)->createImage(200, 200, function ($animation) {
         foreach (['#ff0000', '#00ff00', '#0000ff'] as $color) {
-            $animation->add(ImageManager::gd()->create(200, 200)->fill($color), 0.1);
+            $animation->add(ImageManager::usingDriver(GdDriver::class)->createImage(200, 200)->fill($color), 0.1);
         }
-    })->toGif();
+    })->encodeUsingFormat(Format::GIF);
 
     $url = (new MontageService)->createWeeklyMontage(42, [(string) $gif]);
 
@@ -37,7 +39,7 @@ it('falls back to a placeholder block for undecodable images', function () {
 });
 
 it('uses the canvas of each grid size', function (int $size, int $width, int $height) {
-    $webp = (string) ImageManager::gd()->create(600, 600)->fill('#a4666a')->toWebp();
+    $webp = (string) ImageManager::usingDriver(GdDriver::class)->createImage(600, 600)->fill('#a4666a')->encodeUsingFormat(Format::WEBP);
 
     (new MontageService)->createWeeklyMontage(1, array_fill(0, $size, $webp), $size);
 
@@ -58,16 +60,16 @@ it('falls back to the default layout for unsupported sizes', function () {
 
 it('places each image in its cell, in chart order', function () {
     $colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00'];
-    $images = array_map(fn ($c) => (string) ImageManager::gd()->create(600, 600)->fill($c)->toPng(), $colors);
+    $images = array_map(fn ($c) => (string) ImageManager::usingDriver(GdDriver::class)->createImage(600, 600)->fill($c)->encodeUsingFormat(Format::PNG), $colors);
 
     (new MontageService)->createWeeklyMontage(1, $images, 4);
 
-    $canvas = ImageManager::gd()->read(Storage::disk('montage')->get(md5('1').'.jpg'));
+    $canvas = ImageManager::usingDriver(GdDriver::class)->decodeBinary(Storage::disk('montage')->get(md5('1').'.jpg'));
 
     // Center of each 2x2 cell.
     $centers = [[300, 300], [900, 300], [300, 900], [900, 900]];
     foreach ($centers as $i => [$x, $y]) {
-        $rgb = $canvas->pickColor($x, $y)->toHex('#');
+        $rgb = $canvas->colorAt($x, $y)->toHex(prefix: true);
         $expected = $colors[$i];
 
         // JPEG is lossy: compare each channel with some tolerance.

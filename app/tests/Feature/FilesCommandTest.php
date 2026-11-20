@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 beforeEach(function () {
     foreach (['montage', 'artist-cache', 'album-cache', 'montage-local', 'artist-cache-local', 'album-cache-local'] as $disk) {
         Storage::fake($disk);
     }
 
-    $this->jpeg = (string) ImageManager::gd()->create(900, 700)->fill('#123456')->toJpeg(quality: 100);
+    $this->jpeg = (string) ImageManager::usingDriver(GdDriver::class)->createImage(900, 700)->fill('#123456')->encodeUsingFormat(Format::JPEG, quality: 100);
 });
 
 function configureS3Disks(): void
@@ -60,7 +62,7 @@ it('refuses to copy to s3 when IMAGE_STORAGE is local', function () {
 
 it('normalizes the cache in place on the configured disks', function () {
     Storage::disk('artist-cache')->put(md5('band').'.jpg', $this->jpeg);
-    Storage::disk('album-cache')->put(md5('a|b').'.png', (string) ImageManager::gd()->create(800, 800)->fill('#00ff00')->toPng());
+    Storage::disk('album-cache')->put(md5('a|b').'.png', (string) ImageManager::usingDriver(GdDriver::class)->createImage(800, 800)->fill('#00ff00')->encodeUsingFormat(Format::PNG));
     Storage::disk('montage')->put(md5('1').'.jpg', $this->jpeg);
 
     $this->artisan('lastfm:files', ['action' => 'normalize-cache'])->assertSuccessful();

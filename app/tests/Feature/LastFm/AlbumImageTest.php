@@ -10,6 +10,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Format;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 
 uses(RefreshDatabase::class);
 
@@ -18,7 +20,7 @@ beforeEach(function () {
     config(['lastfm.api_key' => 'test-api-key', 'lastfm.proxy_url' => null]);
 
     $this->images = app(AlbumImageFetcher::class);
-    $this->cover = (string) ImageManager::gd()->create(1000, 1000)->fill('#654321')->toJpeg(quality: 100);
+    $this->cover = (string) ImageManager::usingDriver(GdDriver::class)->createImage(1000, 1000)->fill('#654321')->encodeUsingFormat(Format::JPEG, quality: 100);
     $this->placeholder = file_get_contents(public_path('images/placeholder.jpg'));
 });
 
@@ -128,7 +130,7 @@ it('sets a cover from a URL and keeps the current one when it fails', function (
 });
 
 it('downloads the original size cover from the Last.fm CDN', function () {
-    $big = (string) ImageManager::gd()->create(1200, 1200)->fill('#123456')->toJpeg(quality: 100);
+    $big = (string) ImageManager::usingDriver(GdDriver::class)->createImage(1200, 1200)->fill('#123456')->encodeUsingFormat(Format::JPEG, quality: 100);
 
     Http::fake([
         'https://ws.audioscrobbler.com/*' => Http::response(albumInfo('https://lastfm.cdn.test/i/u/300x300/abc.png')),
@@ -144,7 +146,7 @@ it('downloads the original size cover from the Last.fm CDN', function () {
 });
 
 it('falls back to the 300px cover when the original is unavailable', function () {
-    $small = (string) ImageManager::gd()->create(300, 300)->fill('#654321')->toJpeg(quality: 100);
+    $small = (string) ImageManager::usingDriver(GdDriver::class)->createImage(300, 300)->fill('#654321')->encodeUsingFormat(Format::JPEG, quality: 100);
 
     Http::fake([
         'https://ws.audioscrobbler.com/*' => Http::response(albumInfo('https://lastfm.cdn.test/i/u/300x300/abc.png')),
