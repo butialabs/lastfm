@@ -50,10 +50,17 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300&family=Red+Hat+Display&family=Syne:wght@700&display=swap" rel="stylesheet">
+	<style>
+		.alert.notice-bar{position:fixed;top:0;left:0;right:0;z-index:1000;margin:0;background-color:#fdf7df;color:#7a5a0b;border-radius:0;border-width:0 0 1px;padding:10px 16px;font-size:.9rem;line-height:1.4;text-align:center;max-width:none}
+		body{padding-top:var(--notice-h,0px)}
+	</style>
 	@livewireStyles
 </head>
 
 <body class="@yield('body-class')">
+	<div class="alert alert--info notice-bar" id="notice-bar" role="alert">
+		{!! __('messages.notice.lastfm_api', ['link' => '<a href="https://support.last.fm/t/api-keys-will-require-pro-from-1st-december/121030" target="_blank" rel="noopener">' . e(__('messages.notice.lastfm_api_link')) . '</a>']) !!}
+	</div>
 	<div class="middle">
 		<div class="container">
 			<header>
@@ -87,6 +94,15 @@
 		</div>
 	</div>
 
+	<script>
+		(function () {
+			var bar = document.getElementById('notice-bar');
+			if (!bar) return;
+			function sync() { document.documentElement.style.setProperty('--notice-h', bar.offsetHeight + 'px'); }
+			sync();
+			window.addEventListener('resize', sync);
+		})();
+	</script>
 	@livewireScripts
 </body>
 

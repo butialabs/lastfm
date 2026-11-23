@@ -7,6 +7,9 @@ return [
     'app.description' => 'Publique automaticamente seus top artistas do Last.fm da última semana no dia escolhido usando sua conta Bluesky ou Mastodon',
     'app.language' => 'Idioma',
 
+    'notice.lastfm_api' => 'A partir de 1º de dezembro, o Last.fm vai exigir a assinatura Pro para usar chaves de API (:link). Se isso se mantiver, o LastFM.blue será encerrado na mesma data.',
+    'notice.lastfm_api_link' => 'veja o anúncio',
+
     'footer.made_with_love' => 'Feito com ❤️ por',
     'footer.total_users' => '{0} %d usuários|{1} %d usuário|[2,*] %d usuários',
 

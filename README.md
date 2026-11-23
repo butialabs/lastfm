@@ -8,6 +8,9 @@
 
 🌐 **Public Instance:** [https://lastfm.butialabs.com](https://lastfm.butialabs.com)
 
+> [!WARNING]
+> Starting **December 1st**, Last.fm will require a **Pro subscription** to use API keys ([announcement](https://support.last.fm/t/api-keys-will-require-pro-from-1st-december/121030/183)). If this stays in place, LastFM will be shut down on the same date.
+
 ---
 
 ## 🐳 Docker Installation (Recommended)

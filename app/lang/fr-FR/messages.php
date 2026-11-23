@@ -7,6 +7,9 @@ return [
     'app.description' => 'Partagez automatiquement vos artistes préférés de la semaine passée sur Last.fm à une date choisie en utilisant votre compte Bluesky ou Mastodon',
     'app.language' => 'Langue',
 
+    'notice.lastfm_api' => 'À partir du 1er décembre, Last.fm exigera un abonnement Pro pour utiliser les clés d\'API (:link). Si cela se maintient, LastFM.blue sera arrêté à la même date.',
+    'notice.lastfm_api_link' => 'voir l\'annonce',
+
     'footer.made_with_love' => 'Fait avec ❤️ par',
     'footer.total_users' => '{0} %d utilisateurs|{1} %d utilisateur|[2,*] %d utilisateurs',
 

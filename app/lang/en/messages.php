@@ -7,6 +7,9 @@ return [
     'app.description' => 'Automatically post your top Last.fm artists from the past week, on the day you choose, to your Bluesky or Mastodon account',
     'app.language' => 'Language',
 
+    'notice.lastfm_api' => 'Starting December 1st, Last.fm will require a Pro subscription to use API keys (:link). If this stays in place, LastFM.blue will be shut down on the same date.',
+    'notice.lastfm_api_link' => 'see the announcement',
+
     'footer.made_with_love' => 'Made with ❤️ by',
     'footer.total_users' => '{0} %d users|{1} %d user|[2,*] %d users',
 
